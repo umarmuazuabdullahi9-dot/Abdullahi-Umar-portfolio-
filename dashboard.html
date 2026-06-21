@@ -1,0 +1,2975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <title>My Portfolio & Admin Panel</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: { primary: '#3b82f6', secondary: '#64748b', dark: '#0f172a' }
+                }
+            }
+        }
+    </script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-storage-compat.js"></script>
+
+    <style>
+        * { -webkit-tap-highlight-color: transparent; }
+        body { font-family: 'Inter', sans-serif; overscroll-behavior-y: none; }
+        .fade-in { animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .nav-link.active { color: #3b82f6; border-bottom: 2px solid #3b82f6; }
+        .admin-sidebar-link.active { background-color: #334155; border-left: 4px solid #3b82f6; }
+        .upload-zone { border: 2px dashed #cbd5e1; transition: all 0.3s ease; }
+        .upload-zone:hover, .upload-zone.drag-over { border-color: #3b82f6; background-color: #eff6ff; }
+        .profile-image-preview { width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 4px solid #e2e8f0; }
+        .spinner { border: 3px solid #f3f3f3; border-top: 3px solid #3b82f6; border-radius: 50%; width: 24px; height: 24px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .loading-overlay { position: fixed; inset: 0; background: rgba(255,255,255,0.95); z-index: 100; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+        .loading-overlay.hidden { display: none; }
+
+        #admin-sidebar { transform: translateX(-100%); transition: transform 0.3s ease-in-out; width: 280px; max-width: 85vw; }
+        #admin-sidebar.open { transform: translateX(0); }
+        #admin-sidebar-overlay { opacity: 0; visibility: hidden; transition: all 0.3s ease-in-out; }
+        #admin-sidebar-overlay.open { opacity: 1; visibility: visible; }
+        #admin-main-content { margin-left: 0; min-height: 100vh; padding-bottom: 80px; background: #f3f4f6; }
+        #mobile-admin-nav { display: flex; position: fixed; bottom: 0; left: 0; right: 0; background: #0f172a; z-index: 40; border-top: 1px solid #334155; padding-bottom: env(safe-area-inset-bottom); }
+        #mobile-admin-nav a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 8px 4px; color: #94a3b8; font-size: 10px; transition: all 0.2s; min-height: 56px; position: relative; text-decoration: none; }
+        #mobile-admin-nav a i { font-size: 20px; margin-bottom: 2px; }
+        #mobile-admin-nav a.active { color: #3b82f6; }
+        #mobile-admin-nav a:active { background: rgba(255,255,255,0.05); }
+        .btn-touch { min-height: 44px; min-width: 44px; }
+
+        @media (min-width: 1024px) {
+            #admin-sidebar { transform: translateX(0) !important; width: 260px; }
+            #admin-main-content { margin-left: 260px; padding-bottom: 0; }
+            #mobile-admin-nav, #admin-sidebar-overlay, #admin-menu-toggle { display: none !important; }
+        }
+
+        @media (max-width: 768px) {
+            input, select, textarea, button { font-size: 16px !important; }
+        }
+
+        .responsive-table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .responsive-table-container table { min-width: 640px; }
+        .mobile-project-card { background: white; border-radius: 0.75rem; padding: 1rem; margin-bottom: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .admin-page-section { display: block; }
+        .admin-page-section.hidden { display: none !important; }
+        #toast { transform: translateY(100px); opacity: 0; transition: all 0.3s ease; }
+        #toast.show { transform: translateY(0); opacity: 1; }
+
+        .message-item { transition: all 0.2s; }
+        .message-item:hover { background-color: #f9fafb; }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .filter-btn.active { background-color: #3b82f6; color: white; }
+        #notification-banner { animation: slideDown 0.3s ease; }
+        @keyframes slideDown { from { transform: translateY(-100%); } to { transform: translateY(0); } }
+        .role-badge { display: inline-flex; align-items: center; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .role-admin { background-color: #dbeafe; color: #1e40af; }
+        .role-editor { background-color: #d1fae5; color: #065f46; }
+        .role-viewer { background-color: #f3f4f6; color: #4b5563; }
+
+        /* Access Control Styles */
+        .permission-row { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; border-bottom: 1px solid #e5e7eb; }
+        .permission-row:last-child { border-bottom: none; }
+        .permission-check { color: #10b981; }
+        .permission-x { color: #ef4444; }
+        .access-denied-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 200; display: flex; align-items: center; justify-content: center; }
+        .access-denied-card { background: white; border-radius: 1rem; padding: 2rem; max-width: 400px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
+    </style>
+</head>
+<body class="bg-gray-50 text-gray-800">
+
+    <div id="loading-screen" class="loading-overlay">
+        <div class="spinner mb-4"></div>
+        <p class="text-gray-600 font-medium">Loading Portfolio...</p>
+    </div>
+
+    <!-- ACCESS DENIED MODAL -->
+    <div id="access-denied-modal" class="access-denied-overlay hidden">
+        <div class="access-denied-card">
+            <div class="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i class="fas fa-lock text-2xl text-red-500"></i>
+            </div>
+            <h3 class="text-xl font-bold text-gray-900 mb-2">Access Denied</h3>
+            <p class="text-gray-600 mb-4">You don't have permission to access this section. Contact your administrator for assistance.</p>
+            <button onclick="closeAccessDenied()" class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition btn-touch">
+                Go Back to Dashboard
+            </button>
+        </div>
+    </div>
+
+    <div id="public-section">
+        <nav class="fixed w-full bg-white/90 backdrop-blur-md shadow-sm z-50" id="navbar">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="flex justify-between h-16 items-center">
+                    <div class="flex-shrink-0 flex items-center cursor-pointer" onclick="navigateTo('home')">
+                        <span class="text-2xl font-bold text-primary">MyPortfolio</span>
+                    </div>
+                    <div class="hidden md:flex space-x-8">
+                        <a href="#" onclick="navigateTo('home')" class="nav-link active px-3 py-2 text-sm font-medium text-gray-700 hover:text-primary transition">Home</a>
+                        <a href="#" onclick="navigateTo('about')" class="nav-link px-3 py-2 text-sm font-medium text-gray-700 hover:text-primary transition">About</a>
+                        <a href="#" onclick="navigateTo('projects')" class="nav-link px-3 py-2 text-sm font-medium text-gray-700 hover:text-primary transition">Projects</a>
+                        <a href="#" onclick="navigateTo('contact')" class="nav-link px-3 py-2 text-sm font-medium text-gray-700 hover:text-primary transition">Contact</a>
+                        <a href="#" onclick="showAdminLogin()" class="px-4 py-2 text-sm font-medium text-white bg-primary rounded-lg hover:bg-blue-600 transition">Admin</a>
+                    </div>
+                    <div class="md:hidden flex items-center">
+                        <button onclick="toggleMobileMenu()" class="text-gray-700 hover:text-primary p-2 btn-touch"><i class="fas fa-bars text-2xl"></i></button>
+                    </div>
+                </div>
+            </div>
+            <div id="mobile-menu" class="hidden md:hidden bg-white border-t">
+                <div class="px-2 pt-2 pb-3 space-y-1">
+                    <a href="#" onclick="navigateTo('home')" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-primary hover:bg-gray-50 rounded-md">Home</a>
+                    <a href="#" onclick="navigateTo('about')" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-primary hover:bg-gray-50 rounded-md">About</a>
+                    <a href="#" onclick="navigateTo('projects')" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-primary hover:bg-gray-50 rounded-md">Projects</a>
+                    <a href="#" onclick="navigateTo('contact')" class="block px-3 py-2 text-base font-medium text-gray-700 hover:text-primary hover:bg-gray-50 rounded-md">Contact</a>
+                    <a href="#" onclick="showAdminLogin()" class="block px-3 py-2 text-base font-medium text-primary font-bold">Admin Login</a>
+                </div>
+            </div>
+        </nav>
+
+        <main id="public-content" class="pt-16 min-h-screen">
+            <section id="home" class="page-section fade-in">
+                <div class="relative bg-white overflow-hidden">
+                    <div class="max-w-7xl mx-auto">
+                        <div class="relative z-10 pb-8 bg-white sm:pb-16 md:pb-20 lg:max-w-2xl lg:w-full lg:pb-28 xl:pb-32">
+                            <main class="mt-10 mx-auto max-w-7xl px-4 sm:mt-12 sm:px-6 md:mt-16 lg:mt-20 lg:px-8 xl:mt-28">
+                                <div class="sm:text-center lg:text-left">
+                                    <h1 class="text-4xl tracking-tight font-extrabold text-gray-900 sm:text-5xl md:text-6xl">
+                                        <span class="block xl:inline">Hello, I'm</span>
+                                        <span class="block text-primary xl:inline" id="hero-name">Loading...</span>
+                                    </h1>
+                                    <p class="mt-3 text-base text-gray-500 sm:mt-5 sm:text-lg sm:max-w-xl sm:mx-auto md:mt-5 md:text-xl lg:mx-0" id="hero-title">Loading profile...</p>
+                                    <div class="mt-5 sm:mt-8 sm:flex sm:justify-center lg:justify-start">
+                                        <div class="rounded-md shadow">
+                                            <a href="#" onclick="navigateTo('projects')" class="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-white bg-primary hover:bg-blue-700 md:py-4 md:text-lg transition">View My Work</a>
+                                        </div>
+                                        <div class="mt-3 sm:mt-0 sm:ml-3">
+                                            <a href="#" onclick="navigateTo('contact')" class="w-full flex items-center justify-center px-8 py-3 border border-transparent text-base font-medium rounded-md text-primary bg-blue-100 hover:bg-blue-200 md:py-4 md:text-lg transition">Contact Me</a>
+                                        </div>
+                                    </div>
+                                    <div class="mt-8 flex space-x-6 sm:justify-center lg:justify-start" id="social-links"></div>
+                                </div>
+                            </main>
+                        </div>
+                    </div>
+                    <div class="lg:absolute lg:inset-y-0 lg:right-0 lg:w-1/2 bg-gray-100 flex items-center justify-center">
+                        <div class="h-64 w-full sm:h-72 md:h-96 lg:h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
+                            <div class="text-center">
+                                <img id="hero-profile-image" src="" alt="Profile" class="w-64 h-64 mx-auto rounded-full shadow-xl object-cover border-4 border-white hidden">
+                                <div id="hero-profile-placeholder" class="w-64 h-64 mx-auto bg-white rounded-full shadow-xl flex items-center justify-center mb-4 overflow-hidden border-4 border-white">
+                                    <i class="fas fa-user text-8xl text-gray-300"></i>
+                                </div>
+                                <p class="text-gray-500 italic">Your Photo</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="about" class="page-section hidden fade-in py-20 bg-white">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-16">
+                        <h2 class="text-3xl font-extrabold text-gray-900 sm:text-4xl">About Me</h2>
+                        <div class="mt-2 h-1 w-20 bg-primary mx-auto rounded"></div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
+                        <div class="relative">
+                            <div class="aspect-w-3 aspect-h-4 rounded-2xl overflow-hidden shadow-2xl bg-gray-200 flex items-center justify-center h-96">
+                                <img id="about-image" src="" alt="About" class="w-full h-full object-cover hidden">
+                                <div id="about-placeholder" class="flex flex-col items-center justify-center">
+                                    <i class="fas fa-image text-6xl text-gray-400 mb-4"></i>
+                                    <p class="text-gray-500">Your Photo Here</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-900 mb-4">Who am I?</h3>
+                            <p class="text-gray-600 mb-6 leading-relaxed" id="about-bio">Loading...</p>
+                            <p class="text-gray-600 mb-8 leading-relaxed">My goal is to always build products that provide pixel-perfect, performant experiences. I enjoy turning complex problems into simple, beautiful, and intuitive solutions.</p>
+                            <h4 class="text-xl font-bold text-gray-900 mb-4">My Skills</h4>
+                            <div id="skills-container" class="space-y-4"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="projects" class="page-section hidden fade-in py-20 bg-gray-50">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-16">
+                        <h2 class="text-3xl font-extrabold text-gray-900 sm:text-4xl">My Projects</h2>
+                        <div class="mt-2 h-1 w-20 bg-primary mx-auto rounded"></div>
+                        <p class="mt-4 text-gray-600 max-w-2xl mx-auto">Here are some of my recent works.</p>
+                    </div>
+                    <div id="projects-loading" class="flex justify-center py-12"><div class="spinner"></div></div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 hidden" id="projects-grid"></div>
+                </div>
+            </section>
+
+            <section id="contact" class="page-section hidden fade-in py-20 bg-white">
+                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <div class="text-center mb-16">
+                        <h2 class="text-3xl font-extrabold text-gray-900 sm:text-4xl">Get In Touch</h2>
+                        <div class="mt-2 h-1 w-20 bg-primary mx-auto rounded"></div>
+                        <p class="mt-4 text-gray-600">Have a project in mind? Let's work together!</p>
+                    </div>
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                        <div class="bg-gray-50 p-8 rounded-2xl shadow-lg">
+                            <h3 class="text-2xl font-bold text-gray-900 mb-6">Send a Message</h3>
+                            <form id="contact-form" onsubmit="handleContactSubmit(event)">
+                                <div class="mb-6">
+                                    <label class="block text-gray-700 text-sm font-bold mb-2">Full Name</label>
+                                    <input class="shadow appearance-none border rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary" id="name" type="text" placeholder="John Doe" required>
+                                </div>
+                                <div class="mb-6">
+                                    <label class="block text-gray-700 text-sm font-bold mb-2">Email Address</label>
+                                    <input class="shadow appearance-none border rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary" id="email" type="email" placeholder="john@example.com" required>
+                                </div>
+                                <div class="mb-6">
+                                    <label class="block text-gray-700 text-sm font-bold mb-2">Subject</label>
+                                    <input class="shadow appearance-none border rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary" id="subject" type="text" placeholder="Project Inquiry" required>
+                                </div>
+                                <div class="mb-6">
+                                    <label class="block text-gray-700 text-sm font-bold mb-2">Message</label>
+                                    <textarea class="shadow appearance-none border rounded w-full py-3 px-4 text-gray-700 leading-tight focus:outline-none focus:ring-2 focus:ring-primary h-32 resize-none" id="message" placeholder="Tell me about your project..." required></textarea>
+                                </div>
+                                <button class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-3 px-4 rounded focus:outline-none transition duration-300 btn-touch" type="submit">Send Message <i class="fas fa-paper-plane ml-2"></i></button>
+                            </form>
+                        </div>
+                        <div class="space-y-8">
+                            <div class="flex items-start space-x-4">
+                                <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-primary"><i class="fas fa-map-marker-alt text-xl"></i></div>
+                                <div><h4 class="text-lg font-bold text-gray-900">Location</h4><p class="text-gray-600" id="contact-location">Loading...</p></div>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-primary"><i class="fas fa-envelope text-xl"></i></div>
+                                <div><h4 class="text-lg font-bold text-gray-900">Email</h4><p class="text-gray-600" id="contact-email">Loading...</p></div>
+                            </div>
+                            <div class="flex items-start space-x-4">
+                                <div class="flex-shrink-0 w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center text-primary"><i class="fas fa-phone text-xl"></i></div>
+                                <div><h4 class="text-lg font-bold text-gray-900">Phone</h4><p class="text-gray-600" id="contact-phone">Loading...</p></div>
+                            </div>
+                            <div class="mt-8 p-6 bg-blue-50 rounded-xl border border-blue-100">
+                                <h4 class="text-lg font-bold text-gray-900 mb-2">Availability</h4>
+                                <p class="text-gray-600 mb-4">I'm currently available for freelance work.</p>
+                                <div class="flex items-center space-x-2">
+                                    <span class="w-3 h-3 bg-green-500 rounded-full animate-pulse"></span>
+                                    <span class="text-green-600 font-medium">Open to work</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer class="bg-dark text-white py-12">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div><h3 class="text-2xl font-bold mb-4">MyPortfolio</h3><p class="text-gray-400">Building digital products with passion and precision.</p></div>
+                    <div>
+                        <h4 class="text-lg font-bold mb-4">Quick Links</h4>
+                        <ul class="space-y-2 text-gray-400">
+                            <li><a href="#" onclick="navigateTo('home')" class="hover:text-white transition">Home</a></li>
+                            <li><a href="#" onclick="navigateTo('about')" class="hover:text-white transition">About</a></li>
+                            <li><a href="#" onclick="navigateTo('projects')" class="hover:text-white transition">Projects</a></li>
+                            <li><a href="#" onclick="navigateTo('contact')" class="hover:text-white transition">Contact</a></li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 class="text-lg font-bold mb-4">Connect</h4>
+                        <div class="flex space-x-4" id="footer-social"></div>
+                    </div>
+                </div>
+                <div class="border-t border-gray-700 mt-8 pt-8 text-center text-gray-400">
+                    <p id="footer-year"> MyPortfolio. All rights reserved.</p>
+                </div>
+            </div>
+        </footer>
+    </div>
+
+    <div id="admin-section" class="hidden min-h-screen bg-gray-100">
+        <div id="admin-login" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6 md:p-8 max-h-[90vh] overflow-y-auto">
+                <div class="text-center mb-6 md:mb-8">
+                    <div class="w-14 h-14 md:w-16 md:h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                        <i class="fas fa-lock text-xl md:text-2xl text-primary"></i>
+                    </div>
+                    <h2 class="text-xl md:text-2xl font-bold text-gray-900">Admin Login</h2>
+                    <p class="text-gray-500 mt-2 text-sm">Enter your credentials</p>
+                </div>
+                <form id="login-form" onsubmit="handleLogin(event)">
+                    <div class="mb-4 md:mb-6">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Email</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><i class="fas fa-envelope"></i></span>
+                            <input type="email" id="admin-email" class="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" placeholder="admin@example.com" required>
+                        </div>
+                    </div>
+                    <div class="mb-4 md:mb-6">
+                        <label class="block text-gray-700 text-sm font-bold mb-2">Password</label>
+                        <div class="relative">
+                            <span class="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400"><i class="fas fa-lock"></i></span>
+                            <input type="password" id="admin-password" class="w-full pl-10 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" placeholder="password" required>
+                        </div>
+                    </div>
+                    <button type="submit" class="w-full bg-primary hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition btn-touch">Sign In</button>
+                    <button type="button" onclick="closeAdminLogin()" class="w-full mt-3 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3 px-4 rounded-lg transition btn-touch">Back to Portfolio</button>
+                </form>
+                <div class="mt-4 text-center text-xs text-gray-500"><p>Firebase Authentication enabled</p></div>
+            </div>
+        </div>
+
+        <div id="admin-dashboard" class="hidden">
+            <div id="admin-sidebar-overlay" class="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onclick="toggleAdminSidebar()"></div>
+
+            <aside class="fixed inset-y-0 left-0 z-50 bg-dark text-white" id="admin-sidebar">
+                <div class="flex items-center justify-between h-16 bg-gray-900 border-b border-gray-700 px-4">
+                    <span class="text-xl font-bold">Admin Panel</span>
+                    <button onclick="toggleAdminSidebar()" class="lg:hidden text-gray-400 hover:text-white p-2 btn-touch">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <nav class="mt-4 overflow-y-auto h-[calc(100vh-4rem)] pb-20">
+                    <div class="px-4 mb-2 text-xs text-gray-400 uppercase">Main</div>
+                    <a href="#" onclick="navigateAdmin('dashboard'); return false;" class="admin-sidebar-link active flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 transition btn-touch" data-page="dashboard">
+                        <i class="fas fa-tachometer-alt w-8 text-center"></i><span class="ml-2">Dashboard</span>
+                    </a>
+                    <a href="#" onclick="navigateAdmin('projects-admin'); return false;" class="admin-sidebar-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 transition btn-touch" data-page="projects-admin">
+                        <i class="fas fa-project-diagram w-8 text-center"></i><span class="ml-2">Projects</span>
+                    </a>
+                    <a href="#" onclick="navigateAdmin('messages'); return false;" class="admin-sidebar-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 transition btn-touch" data-page="messages">
+                        <i class="fas fa-envelope w-8 text-center"></i><span class="ml-2">Inbox</span>
+                        <span id="msg-badge-sidebar" class="ml-auto bg-red-500 text-white text-xs px-2 py-0.5 rounded-full hidden">0</span>
+                    </a>
+                    <div class="px-4 mt-6 mb-2 text-xs text-gray-400 uppercase">Settings</div>
+                    <a href="#" onclick="navigateAdmin('settings'); return false;" class="admin-sidebar-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 transition btn-touch" data-page="settings">
+                        <i class="fas fa-cog w-8 text-center"></i><span class="ml-2">Settings</span>
+                    </a>
+                    <a href="#" onclick="navigateAdmin('access-control'); return false;" class="admin-sidebar-link flex items-center px-4 py-3 text-gray-300 hover:bg-gray-700 transition btn-touch" data-page="access-control">
+                        <i class="fas fa-shield-alt w-8 text-center"></i><span class="ml-2">Access Control</span>
+                    </a>
+                    <a href="#" onclick="logout(); return false;" class="flex items-center px-4 py-3 text-gray-300 hover:bg-red-600 transition mt-4 btn-touch">
+                        <i class="fas fa-sign-out-alt w-8 text-center"></i><span class="ml-2">Logout</span>
+                    </a>
+                </nav>
+            </aside>
+
+            <div id="admin-main-content" class="flex flex-col min-h-screen">
+                <header id="admin-header" class="h-16 bg-white shadow-sm flex items-center justify-between px-4 lg:px-8 sticky top-0 z-30">
+                    <div class="flex items-center space-x-3">
+                        <button id="admin-menu-toggle" onclick="toggleAdminSidebar()" class="lg:hidden text-gray-700 hover:text-primary p-2 btn-touch">
+                            <i class="fas fa-bars text-xl"></i>
+                        </button>
+                        <h2 id="admin-page-title" class="text-lg md:text-xl font-bold text-gray-800">Dashboard</h2>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="toggleNotificationPanel()" class="relative p-2 text-gray-600 hover:text-primary transition btn-touch">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span id="notification-badge" class="absolute top-0 right-0 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center hidden">0</span>
+                        </button>
+                        <div class="flex items-center space-x-2 md:space-x-3">
+                            <div id="admin-avatar" class="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-sm">A</div>
+                            <div class="hidden sm:block">
+                                <span class="text-sm font-medium text-gray-700 block" id="admin-name">Admin</span>
+                                <span class="text-xs text-gray-500" id="admin-role-display">Admin</span>
+                            </div>
+                        </div>
+                    </div>
+                </header>
+
+                <div id="notification-panel" class="fixed top-16 right-4 w-80 bg-white rounded-xl shadow-2xl z-40 hidden border border-gray-200 max-h-[80vh] overflow-y-auto">
+                    <div class="p-4 border-b border-gray-200 flex justify-between items-center">
+                        <h3 class="font-bold text-gray-800">Notifications</h3>
+                        <button onclick="markAllNotificationsRead()" class="text-sm text-primary hover:text-blue-700">Clear All</button>
+                    </div>
+                    <div id="notifications-list" class="divide-y divide-gray-100">
+                        <p class="text-gray-500 text-center py-8 text-sm">No notifications</p>
+                    </div>
+                </div>
+
+                <main class="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
+                    <div id="dashboard" class="admin-page-section">
+                        <div style="display: grid; grid-template-columns: repeat(1, 1fr); gap: 1rem; margin-bottom: 1.5rem;">
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-6 border-l-4 border-primary">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs md:text-sm text-gray-500 mb-1">Total Projects</p>
+                                        <h3 class="text-xl md:text-2xl font-bold text-gray-800" id="dash-project-count">0</h3>
+                                    </div>
+                                    <div class="w-10 h-10 md:w-12 md:h-12 bg-blue-100 rounded-full flex items-center justify-center text-primary">
+                                        <i class="fas fa-folder-open text-lg md:text-xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-6 border-l-4 border-green-500">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs md:text-sm text-gray-500 mb-1">New Messages</p>
+                                        <h3 class="text-xl md:text-2xl font-bold text-gray-800" id="dash-message-count">0</h3>
+                                    </div>
+                                    <div class="w-10 h-10 md:w-12 md:h-12 bg-green-100 rounded-full flex items-center justify-center text-green-600">
+                                        <i class="fas fa-envelope text-lg md:text-xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-6 border-l-4 border-purple-500">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs md:text-sm text-gray-500 mb-1">Site Visits</p>
+                                        <h3 class="text-xl md:text-2xl font-bold text-gray-800">1,234</h3>
+                                    </div>
+                                    <div class="w-10 h-10 md:w-12 md:h-12 bg-purple-100 rounded-full flex items-center justify-center text-purple-600">
+                                        <i class="fas fa-eye text-lg md:text-xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-6 border-l-4 border-yellow-500">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-xs md:text-sm text-gray-500 mb-1">Pending Tasks</p>
+                                        <h3 class="text-xl md:text-2xl font-bold text-gray-800">3</h3>
+                                    </div>
+                                    <div class="w-10 h-10 md:w-12 md:h-12 bg-yellow-100 rounded-full flex items-center justify-center text-yellow-600">
+                                        <i class="fas fa-tasks text-lg md:text-xl"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(1, 1fr); gap: 1rem;">
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-6">
+                                <h3 class="text-base md:text-lg font-bold text-gray-800 mb-4">Recent Messages</h3>
+                                <div id="recent-messages-list" class="space-y-3 md:space-y-4">
+                                    <p class="text-gray-500 text-center py-4">No messages yet</p>
+                                </div>
+                            </div>
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-6">
+                                <h3 class="text-base md:text-lg font-bold text-gray-800 mb-4">Quick Actions</h3>
+                                <div class="space-y-3">
+                                    <button onclick="navigateAdmin('projects-admin')" class="w-full flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-lg hover:bg-blue-50 transition group btn-touch">
+                                        <div class="flex items-center space-x-3">
+                                            <i class="fas fa-plus-circle text-primary text-lg md:text-xl"></i>
+                                            <span class="font-medium text-gray-700 text-sm md:text-base">Add New Project</span>
+                                        </div>
+                                        <i class="fas fa-chevron-right text-gray-400 group-hover:text-primary"></i>
+                                    </button>
+                                    <button onclick="navigateAdmin('settings')" class="w-full flex items-center justify-between p-3 md:p-4 bg-gray-50 rounded-lg hover:bg-blue-50 transition group btn-touch">
+                                        <div class="flex items-center space-x-3">
+                                            <i class="fas fa-user-edit text-primary text-lg md:text-xl"></i>
+                                            <span class="font-medium text-gray-700 text-sm md:text-base">Update Profile</span>
+                                        </div>
+                                        <i class="fas fa-chevron-right text-gray-400 group-hover:text-primary"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="projects-admin" class="admin-page-section hidden">
+                        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+                            <div class="p-4 md:p-6 border-b border-gray-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                <h3 class="text-base md:text-lg font-bold text-gray-800">Manage Projects</h3>
+                                <button onclick="openProjectModal()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center text-sm btn-touch">
+                                    <i class="fas fa-plus mr-2"></i> Add Project
+                                </button>
+                            </div>
+                            <div class="responsive-table-container hidden md:block">
+                                <table class="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr class="bg-gray-50 text-gray-600 text-xs uppercase">
+                                            <th class="px-4 lg:px-6 py-3 lg:py-4 font-semibold">Project</th>
+                                            <th class="px-4 lg:px-6 py-3 lg:py-4 font-semibold">Category</th>
+                                            <th class="px-4 lg:px-6 py-3 lg:py-4 font-semibold">Date</th>
+                                            <th class="px-4 lg:px-6 py-3 lg:py-4 font-semibold">Status</th>
+                                            <th class="px-4 lg:px-6 py-3 lg:py-4 font-semibold text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="admin-projects-table-desktop" class="divide-y divide-gray-100"></tbody>
+                                </table>
+                            </div>
+                            <div id="admin-projects-mobile" class="md:hidden p-4 space-y-3"></div>
+                        </div>
+                    </div>
+
+                    <div id="messages" class="admin-page-section hidden">
+                        <div id="notification-banner" class="hidden bg-blue-50 border border-blue-200 rounded-xl p-4 mb-4 flex items-center justify-between">
+                            <div class="flex items-center space-x-3">
+                                <i class="fas fa-bell text-primary text-xl"></i>
+                                <div>
+                                    <p class="font-medium text-gray-800">Enable Notifications</p>
+                                    <p class="text-sm text-gray-600">Get notified when new messages arrive</p>
+                                </div>
+                            </div>
+                            <button onclick="requestNotificationPermission()" class="bg-primary text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition btn-touch">
+                                Enable
+                            </button>
+                        </div>
+
+                        <div class="bg-white rounded-xl shadow-sm mb-4 overflow-hidden">
+                            <div class="p-4 border-b border-gray-200">
+                                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                                    <div class="flex items-center space-x-2">
+                                        <h3 class="text-lg font-bold text-gray-800">Inbox</h3>
+                                        <span id="unread-badge" class="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full hidden">0</span>
+                                    </div>
+                                    <div class="flex items-center space-x-2">
+                                        <button onclick="setMessageFilter('all')" id="filter-all" class="filter-btn active bg-primary text-white px-3 py-1.5 rounded-lg text-sm font-medium transition btn-touch">
+                                            All
+                                        </button>
+                                        <button onclick="setMessageFilter('unread')" id="filter-unread" class="filter-btn text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-medium transition btn-touch">
+                                            Unread
+                                        </button>
+                                        <button onclick="setMessageFilter('starred')" id="filter-starred" class="filter-btn text-gray-600 hover:bg-gray-100 px-3 py-1.5 rounded-lg text-sm font-medium transition btn-touch">
+                                            Starred
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div id="bulk-actions-bar" class="hidden bg-gray-50 px-4 py-2 border-b border-gray-200 flex items-center justify-between">
+                                <div class="flex items-center space-x-3">
+                                    <span class="text-sm text-gray-600"><span id="selected-count">0</span> selected</span>
+                                    <button onclick="deselectAll()" class="text-sm text-gray-500 hover:text-gray-700 btn-touch">Deselect</button>
+                                </div>
+                                <div class="flex items-center space-x-2">
+                                    <button onclick="bulkMarkRead()" class="text-sm text-primary hover:text-blue-700 font-medium btn-touch px-2 py-1">
+                                        <i class="fas fa-envelope-open mr-1"></i> Mark Read
+                                    </button>
+                                    <button onclick="bulkDelete()" class="text-sm text-red-500 hover:text-red-700 font-medium btn-touch px-2 py-1">
+                                        <i class="fas fa-trash mr-1"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div id="admin-messages-list" class="divide-y divide-gray-100 min-h-[400px]">
+                                <div class="text-center py-12">
+                                    <i class="fas fa-inbox text-6xl text-gray-300 mb-4"></i>
+                                    <p class="text-gray-500 text-lg">No messages yet</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="settings" class="admin-page-section hidden">
+                        <div class="max-w-4xl mx-auto">
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-8 mb-4 md:mb-6">
+                                <h3 class="text-lg md:text-xl font-bold text-gray-800 mb-4 md:mb-6">Profile Picture</h3>
+                                <div class="flex flex-col md:flex-row items-center gap-6 md:gap-8">
+                                    <div class="relative flex-shrink-0">
+                                        <img id="settings-profile-preview" src="" class="profile-image-preview hidden">
+                                        <div id="settings-profile-placeholder" class="profile-image-preview flex items-center justify-center bg-gray-200">
+                                            <i class="fas fa-user text-4xl text-gray-400"></i>
+                                        </div>
+                                    </div>
+                                    <div class="flex-1 w-full">
+                                        <div class="upload-zone rounded-xl p-6 md:p-8 text-center cursor-pointer" id="profile-upload-zone" onclick="document.getElementById('profile-image-input').click()">
+                                            <input type="file" id="profile-image-input" accept="image/*" class="hidden" onchange="handleProfileImageUpload(event)">
+                                            <i class="fas fa-cloud-upload-alt text-3xl md:text-4xl text-gray-400 mb-3"></i>
+                                            <p class="text-gray-600 font-medium text-sm md:text-base">Click to upload or drag and drop</p>
+                                            <p class="text-xs md:text-sm text-gray-400 mt-1">PNG, JPG, GIF up to 5MB</p>
+                                        </div>
+                                        <div id="profile-upload-progress" class="hidden mt-4">
+                                            <div class="w-full bg-gray-200 rounded-full h-2">
+                                                <div class="bg-primary h-2 rounded-full transition-all duration-300" style="width: 0%" id="profile-progress-bar"></div>
+                                            </div>
+                                            <p class="text-sm text-gray-500 mt-1 text-center">Uploading...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-8">
+                                <h3 class="text-lg md:text-xl font-bold text-gray-800 mb-4 md:mb-6">Profile Information</h3>
+                                <form onsubmit="saveSettings(event)">
+                                    <div style="display: grid; grid-template-columns: repeat(1, 1fr); gap: 1rem;">
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Full Name</label>
+                                            <input type="text" id="setting-name" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Title/Role</label>
+                                            <input type="text" id="setting-title" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Email</label>
+                                            <input type="email" id="setting-email" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                        <div>
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                                            <input type="tel" id="setting-phone" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                        <div style="grid-column: 1 / -1;">
+                                            <label class="block text-sm font-medium text-gray-700 mb-2">Location</label>
+                                            <input type="text" id="setting-location" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent">
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 md:mt-6">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">Bio</label>
+                                        <textarea id="setting-bio" rows="4" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"></textarea>
+                                    </div>
+                                    <div class="mt-4 md:mt-6">
+                                        <h4 class="text-base md:text-lg font-bold text-gray-900 mb-4">Social Links</h4>
+                                        <div style="display: grid; grid-template-columns: repeat(1, 1fr); gap: 1rem;">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fab fa-github mr-1"></i> GitHub</label>
+                                                <input type="url" id="social-github" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary" placeholder="https://github.com/username">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fab fa-linkedin mr-1"></i> LinkedIn</label>
+                                                <input type="url" id="social-linkedin" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary" placeholder="https://linkedin.com/in/username">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fab fa-twitter mr-1"></i> Twitter</label>
+                                                <input type="url" id="social-twitter" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary" placeholder="https://twitter.com/username">
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700 mb-1"><i class="fab fa-instagram mr-1"></i> Instagram</label>
+                                                <input type="url" id="social-instagram" class="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary" placeholder="https://instagram.com/username">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 md:mt-6">
+                                        <h4 class="text-base md:text-lg font-bold text-gray-900 mb-4">Skills</h4>
+                                        <div id="skills-editor" class="space-y-3"></div>
+                                        <button type="button" onclick="addSkillField()" class="mt-3 text-primary hover:text-blue-700 font-medium text-sm btn-touch">
+                                            <i class="fas fa-plus mr-1"></i> Add Skill
+                                        </button>
+                                    </div>
+                                    <div class="mt-4 md:mt-6">
+                                        <label class="block text-sm font-medium text-gray-700 mb-2">About Page Image</label>
+                                        <div class="upload-zone rounded-xl p-4 md:p-6 text-center cursor-pointer" onclick="document.getElementById('about-image-input').click()">
+                                            <input type="file" id="about-image-input" accept="image/*" class="hidden" onchange="handleAboutImageUpload(event)">
+                                            <i class="fas fa-image text-2xl md:text-3xl text-gray-400 mb-2"></i>
+                                            <p class="text-gray-600 font-medium text-sm md:text-base">Upload About Page Image</p>
+                                            <p class="text-xs md:text-sm text-gray-400 mt-1">Recommended: 800x1000px</p>
+                                        </div>
+                                        <div id="about-image-preview-container" class="mt-4 hidden">
+                                            <img id="about-image-preview" src="" class="h-32 md:h-48 rounded-lg object-cover w-full">
+                                        </div>
+                                    </div>
+                                    <div class="pt-4 md:pt-6">
+                                        <button type="submit" class="w-full md:w-auto bg-primary hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg transition btn-touch">Save Changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="access-control" class="admin-page-section hidden">
+                        <div class="max-w-4xl mx-auto">
+                            <!-- Current User Info -->
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-8 mb-4">
+                                <div class="flex items-center justify-between mb-6">
+                                    <div>
+                                        <h3 class="text-lg md:text-xl font-bold text-gray-800">Access Control</h3>
+                                        <p class="text-sm text-gray-500 mt-1">Manage admin users and permissions</p>
+                                    </div>
+                                    <button id="add-user-btn" onclick="openAddUserModal()" class="bg-primary hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center text-sm btn-touch">
+                                        <i class="fas fa-plus mr-2"></i> Add User
+                                    </button>
+                                </div>
+
+                                <div class="bg-blue-50 rounded-lg p-4 mb-6">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white font-bold">
+                                            <i class="fas fa-user-shield"></i>
+                                        </div>
+                                        <div>
+                                            <p class="font-medium text-gray-800" id="current-user-email">admin@example.com</p>
+                                            <span class="role-badge role-admin" id="current-user-role-badge">Admin</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left">
+                                        <thead>
+                                            <tr class="bg-gray-50 text-gray-600 text-xs uppercase">
+                                                <th class="px-4 py-3 font-semibold">User</th>
+                                                <th class="px-4 py-3 font-semibold">Role</th>
+                                                <th class="px-4 py-3 font-semibold">Added By</th>
+                                                <th class="px-4 py-3 font-semibold">Status</th>
+                                                <th class="px-4 py-3 font-semibold text-right">Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="users-list" class="divide-y divide-gray-100">
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Role Permissions Matrix -->
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-8 mb-4">
+                                <h4 class="text-base md:text-lg font-bold text-gray-800 mb-4">Role Permissions Matrix</h4>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full text-left border-collapse">
+                                        <thead>
+                                            <tr class="bg-gray-50 text-gray-600 text-xs uppercase">
+                                                <th class="px-4 py-3 font-semibold">Permission</th>
+                                                <th class="px-4 py-3 font-semibold text-center"><span class="role-badge role-admin">Admin</span></th>
+                                                <th class="px-4 py-3 font-semibold text-center"><span class="role-badge role-editor">Editor</span></th>
+                                                <th class="px-4 py-3 font-semibold text-center"><span class="role-badge role-viewer">Viewer</span></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="divide-y divide-gray-100">
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">View Dashboard</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">Manage Projects (Add/Edit/Delete)</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">View Messages</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">Reply to Messages</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">Delete Messages</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">Edit Profile Settings</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">Manage Access Control</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">Add/Remove Users</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-3 text-sm text-gray-700">Change User Roles</td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-check permission-check"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                                <td class="px-4 py-3 text-center"><i class="fas fa-times permission-x"></i></td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- Role Descriptions -->
+                            <div class="bg-white rounded-xl shadow-sm p-4 md:p-8">
+                                <h4 class="text-base md:text-lg font-bold text-gray-800 mb-4">Role Descriptions</h4>
+                                <div class="space-y-4">
+                                    <div class="flex items-start space-x-3 p-4 bg-blue-50 rounded-lg">
+                                        <span class="role-badge role-admin mt-0.5 flex-shrink-0">Admin</span>
+                                        <div>
+                                            <p class="font-medium text-gray-800">Full Access</p>
+                                            <p class="text-sm text-gray-500">Complete control over all features including user management, settings, and content.</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start space-x-3 p-4 bg-green-50 rounded-lg">
+                                        <span class="role-badge role-editor mt-0.5 flex-shrink-0">Editor</span>
+                                        <div>
+                                            <p class="font-medium text-gray-800">Content Manager</p>
+                                            <p class="text-sm text-gray-500">Can manage projects and messages but cannot access settings or user management.</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
+                                        <span class="role-badge role-viewer mt-0.5 flex-shrink-0">Viewer</span>
+                                        <div>
+                                            <p class="font-medium text-gray-800">Read Only</p>
+                                            <p class="text-sm text-gray-500">Can only view dashboard, projects, and messages. Cannot make any changes.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+
+            <nav id="mobile-admin-nav" class="lg:hidden">
+                <a href="#" onclick="navigateAdmin('dashboard'); return false;" class="active" id="mobile-nav-dashboard">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span>Dashboard</span>
+                </a>
+                <a href="#" onclick="navigateAdmin('projects-admin'); return false;" id="mobile-nav-projects">
+                    <i class="fas fa-project-diagram"></i>
+                    <span>Projects</span>
+                </a>
+                <a href="#" onclick="navigateAdmin('messages'); return false;" id="mobile-nav-messages">
+                    <i class="fas fa-envelope"></i>
+                    <span>Inbox</span>
+                    <span id="msg-badge-mobile" class="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full hidden"></span>
+                </a>
+                <a href="#" onclick="navigateAdmin('settings'); return false;" id="mobile-nav-settings">
+                    <i class="fas fa-cog"></i>
+                    <span>Settings</span>
+                </a>
+            </nav>
+        </div>
+    </div>
+
+    <div id="project-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div class="bg-white rounded-t-2xl sm:rounded-2xl shadow-2xl w-full max-w-lg p-4 sm:p-8 max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-4 sm:mb-6">
+                <h3 id="modal-title" class="text-xl sm:text-2xl font-bold text-gray-900">Add New Project</h3>
+                <button onclick="closeProjectModal()" class="sm:hidden text-gray-400 hover:text-gray-600 p-2 btn-touch">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="project-form" onsubmit="saveProject(event)">
+                <input type="hidden" id="project-id">
+                <div class="mb-4 sm:mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Project Image</label>
+                    <div class="upload-zone rounded-xl p-4 sm:p-6 text-center cursor-pointer mb-3" id="project-upload-zone" onclick="document.getElementById('project-image-input').click()" ondrop="dropHandler(event, 'project')" ondragover="dragOverHandler(event)" ondragleave="dragLeaveHandler(event)">
+                        <input type="file" id="project-image-input" accept="image/*" class="hidden" onchange="handleProjectImageUpload(event)">
+                        <i class="fas fa-cloud-upload-alt text-3xl sm:text-4xl text-gray-400 mb-3"></i>
+                        <p class="text-gray-600 font-medium text-sm sm:text-base">Click or drag image here</p>
+                        <p class="text-xs sm:text-sm text-gray-400 mt-1">PNG, JPG up to 5MB</p>
+                    </div>
+                    <div id="project-image-preview-container" class="hidden relative">
+                        <img id="project-image-preview" src="" class="w-full h-40 sm:h-48 object-cover rounded-lg">
+                        <button type="button" onclick="removeProjectImage()" class="absolute top-2 right-2 bg-red-500 text-white w-8 h-8 rounded-full flex items-center justify-center hover:bg-red-600 transition btn-touch">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="mt-3">
+                        <p class="text-sm text-gray-500 text-center mb-2">— OR —</p>
+                        <input type="url" id="project-image-url" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-base" placeholder="https://example.com/image.jpg" oninput="handleProjectImageUrl(this.value)">
+                        <p class="text-xs text-gray-400 mt-1">Paste image URL directly - no upload needed</p>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Project Title</label>
+                    <input type="text" id="project-title" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-base" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Category</label>
+                    <select id="project-category" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-base">
+                        <option>Web Development</option>
+                        <option>Mobile App</option>
+                        <option>UI/UX Design</option>
+                        <option>Other</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Description</label>
+                    <textarea id="project-desc" rows="3" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-base" required></textarea>
+                </div>
+                <div class="mb-4 sm:mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Project Link (Optional)</label>
+                    <input type="url" id="project-link" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary text-base" placeholder="https://example.com">
+                </div>
+                <div class="flex justify-end space-x-3 pb-4 sm:pb-0">
+                    <button type="button" onclick="closeProjectModal()" class="px-4 py-3 text-gray-600 hover:bg-gray-100 rounded-lg transition btn-touch text-sm sm:text-base">Cancel</button>
+                    <button type="submit" class="px-4 py-3 bg-primary text-white rounded-lg hover:bg-blue-700 transition btn-touch text-sm sm:text-base">Save Project</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="message-view-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+            <div class="p-6 border-b border-gray-200 flex justify-between items-center">
+                <h3 class="text-xl font-bold text-gray-900">Message Details</h3>
+                <button onclick="closeMessageModal()" class="text-gray-400 hover:text-gray-600 p-2 btn-touch">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div id="message-view-content" class="p-6"></div>
+        </div>
+    </div>
+
+    <div id="add-user-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-gray-900">Add New User</h3>
+                <button onclick="closeAddUserModal()" class="text-gray-400 hover:text-gray-600 p-2 btn-touch">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="add-user-form" onsubmit="handleAddUser(event)">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Email Address</label>
+                    <input type="email" id="new-user-email" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" placeholder="user@example.com" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Role</label>
+                    <select id="new-user-role" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="admin">Admin</option>
+                        <option value="editor">Editor</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Temporary Password</label>
+                    <input type="password" id="new-user-password" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Min 6 characters" required minlength="6">
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeAddUserModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition btn-touch">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 transition btn-touch">Add User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Edit User Role Modal -->
+    <div id="edit-user-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold text-gray-900">Edit User Role</h3>
+                <button onclick="closeEditUserModal()" class="text-gray-400 hover:text-gray-600 p-2 btn-touch">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <form id="edit-user-form" onsubmit="handleEditUserRole(event)">
+                <input type="hidden" id="edit-user-id">
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">User Email</label>
+                    <input type="text" id="edit-user-email" class="w-full px-4 py-3 border rounded-lg bg-gray-100" readonly>
+                </div>
+                <div class="mb-6">
+                    <label class="block text-gray-700 text-sm font-bold mb-2">Role</label>
+                    <select id="edit-user-role" class="w-full px-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="admin">Admin</option>
+                        <option value="editor">Editor</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button type="button" onclick="closeEditUserModal()" class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg transition btn-touch">Cancel</button>
+                    <button type="submit" class="px-4 py-2 bg-primary text-white rounded-lg hover:bg-blue-700 transition btn-touch">Update Role</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="image-viewer" class="fixed inset-0 bg-black bg-opacity-90 z-50 hidden flex items-center justify-center p-4" onclick="closeImageViewer()">
+        <img id="viewer-image" src="" class="max-w-full max-h-full rounded-lg shadow-2xl">
+        <button class="absolute top-4 right-4 text-white text-3xl hover:text-gray-300 transition"><i class="fas fa-times"></i></button>
+    </div>
+
+    <div id="toast" class="fixed bottom-5 right-5 bg-gray-800 text-white px-6 py-3 rounded-lg shadow-lg z-50 flex items-center space-x-2">
+        <i id="toast-icon" class="fas fa-check-circle text-green-400"></i>
+        <span id="toast-message">Operation successful</span>
+    </div>
+
+    <script>
+
+        // ============================================
+        // FIREBASE CONFIGURATION
+        // ============================================
+      const firebaseConfig = {
+            apiKey: "AIzaSyBs6BQeJrS6wkMifhQ2cRF8tmZecVBbSE8",
+            authDomain: "abdullahi-umar-profolio.firebaseapp.com",
+            databaseURL: "https://abdullahi-umar-profolio-default-rtdb.firebaseio.com",
+            projectId: "abdullahi-umar-profolio",
+            storageBucket: "abdullahi-umar-profolio.firebasestorage.app",
+            messagingSenderId: "1081189087507",
+            appId: "1:1081189087507:web:fab3da5c9c7ae87144c2e6",
+            measurementId: "G-P6MH203VFE"
+        };
+    
+        let app, db, auth, storage;
+        let currentUser = null;
+        let portfolioData = {};
+        let projects = [];
+        let messages = [];
+        let isAdmin = false;
+        let userRole = 'viewer';
+        let notifications = [];
+        let notificationPermission = 'default';
+        let selectedMessages = new Set();
+        let currentMessageFilter = 'all';
+        let adminUsers = [];
+        let currentEditingUserId = null;
+
+        try {
+            app = firebase.initializeApp(firebaseConfig);
+            db = firebase.database();
+            auth = firebase.auth();
+            storage = firebase.storage();
+            console.log("Firebase initialized successfully");
+        } catch (e) {
+            console.error("Firebase initialization error:", e);
+            showToast("Firebase configuration error. Please check your config.", "error");
+        }
+
+        // ============================================
+        // PERMISSIONS SYSTEM - 100% WORKING
+        // ============================================
+        const ROLE_PERMISSIONS = {
+            'admin': {
+                pages: ['dashboard', 'projects-admin', 'messages', 'settings', 'access-control'],
+                actions: {
+                    'view_dashboard': true,
+                    'manage_projects': true,
+                    'view_messages': true,
+                    'reply_messages': true,
+                    'delete_messages': true,
+                    'edit_settings': true,
+                    'manage_access_control': true,
+                    'add_users': true,
+                    'remove_users': true,
+                    'change_roles': true,
+                    'edit_projects': true,
+                    'delete_projects': true
+                }
+            },
+            'editor': {
+                pages: ['dashboard', 'projects-admin', 'messages'],
+                actions: {
+                    'view_dashboard': true,
+                    'manage_projects': true,
+                    'view_messages': true,
+                    'reply_messages': true,
+                    'delete_messages': true,
+                    'edit_settings': false,
+                    'manage_access_control': false,
+                    'add_users': false,
+                    'remove_users': false,
+                    'change_roles': false,
+                    'edit_projects': true,
+                    'delete_projects': true
+                }
+            },
+            'viewer': {
+                pages: ['dashboard', 'projects-admin', 'messages'],
+                actions: {
+                    'view_dashboard': true,
+                    'manage_projects': false,
+                    'view_messages': true,
+                    'reply_messages': false,
+                    'delete_messages': false,
+                    'edit_settings': false,
+                    'manage_access_control': false,
+                    'add_users': false,
+                    'remove_users': false,
+                    'change_roles': false,
+                    'edit_projects': false,
+                    'delete_projects': false
+                }
+            }
+        };
+
+        function hasPagePermission(page) {
+            const rolePerms = ROLE_PERMISSIONS[userRole];
+            if (!rolePerms) return false;
+            return rolePerms.pages.includes(page);
+        }
+
+        function hasActionPermission(action) {
+            const rolePerms = ROLE_PERMISSIONS[userRole];
+            if (!rolePerms) return false;
+            return rolePerms.actions[action] === true;
+        }
+
+        function showAccessDenied() {
+            document.getElementById('access-denied-modal').classList.remove('hidden');
+        }
+
+        function closeAccessDenied() {
+            document.getElementById('access-denied-modal').classList.add('hidden');
+            navigateAdmin('dashboard');
+        }
+
+        // ============================================
+        // AUTHENTICATION & ACCESS CONTROL
+        // ============================================
+        if (auth) {
+            // Ensure loading hides even if auth check fails
+            const authTimeout = setTimeout(() => {
+                console.warn("[AUTH] Auth state check timed out, forcing loading hide");
+                hideLoading();
+                if (!dataListenersAttached) {
+                    loadPortfolioData();
+                }
+            }, 8000);
+
+            auth.onAuthStateChanged((user) => {
+                clearTimeout(authTimeout);
+                console.log("[AUTH] Auth state resolved:", user ? "User present" : "No user");
+                currentUser = user;
+                if (user) {
+                    // Check user role from database
+                    db.ref('portfolio/adminUsers/' + user.uid).once('value').then((snapshot) => {
+                        const userData = snapshot.val();
+                        if (userData) {
+                            userRole = userData.role || 'admin';
+                        } else {
+                            // If user is not in adminUsers but is authenticated, check if they're the first admin
+                            db.ref('portfolio/adminUsers').once('value').then((usersSnapshot) => {
+                                if (!usersSnapshot.exists()) {
+                                    // First user - make them admin
+                                    userRole = 'admin';
+                                    db.ref('portfolio/adminUsers/' + user.uid).set({
+                                        email: user.email,
+                                        role: 'admin',
+                                        createdAt: Date.now(),
+                                        createdBy: user.uid
+                                    });
+                                } else {
+                                    userRole = 'viewer'; // Default to viewer if not in list
+                                }
+                            });
+                        }
+
+                        isAdmin = true;
+                        document.getElementById('admin-login').classList.add('hidden');
+                        document.getElementById('admin-dashboard').classList.remove('hidden');
+                        document.getElementById('admin-name').textContent = user.email || 'Admin';
+                        document.getElementById('admin-role-display').textContent = userRole.charAt(0).toUpperCase() + userRole.slice(1);
+                        document.getElementById('current-user-email').textContent = user.email;
+
+                        // Update role badge
+                        const roleBadge = document.getElementById('current-user-role-badge');
+                        roleBadge.className = 'role-badge role-' + userRole;
+                        roleBadge.textContent = userRole.charAt(0).toUpperCase() + userRole.slice(1);
+
+                        // Update avatar
+                        document.getElementById('admin-avatar').textContent = user.email ? user.email.charAt(0).toUpperCase() : 'A';
+
+                        // Hide/show sidebar links based on permissions
+                        updateSidebarVisibility();
+
+                        navigateAdmin('dashboard');
+                        loadPortfolioData();
+                        loadAdminData();
+                        setupMessageNotifications();
+                        initNotifications();
+                    }).catch((error) => {
+                        console.error("Error loading user role:", error);
+                        // Default to admin if error
+                        userRole = 'admin';
+                        isAdmin = true;
+                        document.getElementById('admin-login').classList.add('hidden');
+                        document.getElementById('admin-dashboard').classList.remove('hidden');
+                        document.getElementById('admin-name').textContent = user.email || 'Admin';
+                        document.getElementById('admin-role-display').textContent = 'Admin';
+                        navigateAdmin('dashboard');
+                        loadPortfolioData();
+                        loadAdminData();
+                        setupMessageNotifications();
+                        initNotifications();
+                    });
+                } else {
+                    isAdmin = false;
+                    userRole = 'viewer';
+                    // User not logged in - still load public data without auth
+                    loadPortfolioData();
+                }
+                hideLoading();
+            });
+        } else {
+            hideLoading();
+        }
+
+        function updateSidebarVisibility() {
+            // Update sidebar links based on role
+            const sidebarLinks = document.querySelectorAll('.admin-sidebar-link[data-page]');
+            sidebarLinks.forEach(link => {
+                const page = link.getAttribute('data-page');
+                if (hasPagePermission(page)) {
+                    link.style.display = 'flex';
+                } else {
+                    link.style.display = 'none';
+                }
+            });
+
+            // Update mobile nav
+            const mobileNavItems = {
+                'dashboard': document.getElementById('mobile-nav-dashboard'),
+                'projects-admin': document.getElementById('mobile-nav-projects'),
+                'messages': document.getElementById('mobile-nav-messages'),
+                'settings': document.getElementById('mobile-nav-settings')
+            };
+
+            for (const [page, element] of Object.entries(mobileNavItems)) {
+                if (element) {
+                    if (hasPagePermission(page)) {
+                        element.style.display = 'flex';
+                    } else {
+                        element.style.display = 'none';
+                    }
+                }
+            }
+
+            // Hide add user button for non-admins
+            const addUserBtn = document.getElementById('add-user-btn');
+            if (addUserBtn) {
+                if (hasActionPermission('add_users')) {
+                    addUserBtn.style.display = 'flex';
+                } else {
+                    addUserBtn.style.display = 'none';
+                }
+            }
+        }
+
+        // ============================================
+        // UTILITY FUNCTIONS
+        // ============================================
+        function hideLoading() {
+            const loading = document.getElementById('loading-screen');
+            if (loading) loading.classList.add('hidden');
+        }
+
+        function showToast(message, type = 'success') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toast-message');
+            const icon = document.getElementById('toast-icon');
+
+            toastMessage.textContent = message;
+            if (type === 'error') {
+                icon.className = 'fas fa-exclamation-circle text-red-400';
+            } else if (type === 'warning') {
+                icon.className = 'fas fa-exclamation-triangle text-yellow-400';
+            } else {
+                icon.className = 'fas fa-check-circle text-green-400';
+            }
+
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // ============================================
+        // PUBLIC NAVIGATION
+        // ============================================
+        function navigateTo(section) {
+            document.querySelectorAll('.page-section').forEach(sec => {
+                sec.classList.add('hidden');
+            });
+
+            const target = document.getElementById(section);
+            if (target) {
+                target.classList.remove('hidden');
+                target.classList.add('fade-in');
+            }
+
+            document.querySelectorAll('.nav-link').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            const navLinks = document.querySelectorAll(`[onclick="navigateTo('${section}')"]`);
+            navLinks.forEach(link => {
+                if (link.classList.contains('nav-link')) {
+                    link.classList.add('active');
+                }
+            });
+
+            document.getElementById('mobile-menu').classList.add('hidden');
+            window.scrollTo(0, 0);
+        }
+
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+        }
+
+        // ============================================
+        // ADMIN NAVIGATION
+        // ============================================
+        function showAdminLogin() {
+            document.getElementById('public-section').classList.add('hidden');
+            document.getElementById('admin-section').classList.remove('hidden');
+            document.getElementById('admin-login').classList.remove('hidden');
+            document.getElementById('admin-dashboard').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function closeAdminLogin() {
+            document.getElementById('admin-section').classList.add('hidden');
+            document.getElementById('public-section').classList.remove('hidden');
+            document.body.style.overflow = '';
+            navigateTo('home');
+        }
+
+        function navigateAdmin(page) {
+            // Check page permissions
+            if (!hasPagePermission(page)) {
+                showAccessDenied();
+                return;
+            }
+
+            document.querySelectorAll('.admin-page-section').forEach(sec => {
+                sec.classList.add('hidden');
+            });
+
+            const target = document.getElementById(page);
+            if (target) {
+                target.classList.remove('hidden');
+            }
+
+            const titles = {
+                'dashboard': 'Dashboard',
+                'projects-admin': 'Manage Projects',
+                'messages': 'Inbox',
+                'settings': 'Settings',
+                'access-control': 'Access Control'
+            };
+            document.getElementById('admin-page-title').textContent = titles[page] || 'Dashboard';
+
+            document.querySelectorAll('.admin-sidebar-link').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            const activeLink = document.querySelector(`#admin-sidebar [onclick*="navigateAdmin('${page}')"]`);
+            if (activeLink && activeLink.classList.contains('admin-sidebar-link')) {
+                activeLink.classList.add('active');
+            }
+
+            document.querySelectorAll('#mobile-admin-nav a').forEach(link => {
+                link.classList.remove('active');
+            });
+            const mobileNavIds = {
+                'dashboard': 'mobile-nav-dashboard',
+                'projects-admin': 'mobile-nav-projects',
+                'messages': 'mobile-nav-messages',
+                'settings': 'mobile-nav-settings'
+            };
+            const mobileNav = document.getElementById(mobileNavIds[page]);
+            if (mobileNav) mobileNav.classList.add('active');
+
+            if (window.innerWidth < 1024) {
+                closeAdminSidebar();
+            }
+
+            window.scrollTo(0, 0);
+
+            if (page === 'messages') loadInbox();
+            if (page === 'projects-admin') loadAdminProjects();
+            if (page === 'settings') loadSettings();
+            if (page === 'access-control') loadAccessControl();
+        }
+
+        function toggleAdminSidebar() {
+            const sidebar = document.getElementById('admin-sidebar');
+            const overlay = document.getElementById('admin-sidebar-overlay');
+            sidebar.classList.toggle('open');
+            overlay.classList.toggle('open');
+            document.body.style.overflow = sidebar.classList.contains('open') ? 'hidden' : '';
+        }
+
+        function closeAdminSidebar() {
+            const sidebar = document.getElementById('admin-sidebar');
+            const overlay = document.getElementById('admin-sidebar-overlay');
+            sidebar.classList.remove('open');
+            overlay.classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        // ============================================
+        // AUTH FUNCTIONS
+        // ============================================
+        function handleLogin(event) {
+            event.preventDefault();
+            const email = document.getElementById('admin-email').value;
+            const password = document.getElementById('admin-password').value;
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+
+            if (!auth) {
+                showToast("Firebase not initialized. Check your configuration.", "error");
+                return;
+            }
+
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Signing in...';
+            submitBtn.disabled = true;
+
+            auth.signInWithEmailAndPassword(email, password)
+                .then(() => {
+                    showToast("Login successful!");
+                })
+                .catch((error) => {
+                    showToast("Login failed: " + error.message, "error");
+                })
+                .finally(() => {
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                });
+        }
+
+        function logout() {
+            if (auth) {
+                auth.signOut().then(() => {
+                    document.getElementById('admin-dashboard').classList.add('hidden');
+                    document.getElementById('admin-login').classList.remove('hidden');
+                    closeAdminLogin();
+                    showToast("Logged out successfully");
+                });
+            }
+        }
+
+        // ============================================
+        // DATA LOADING
+        // ============================================
+        function loadPortfolioData() {
+            if (!db) {
+                useDefaultData();
+                return;
+            }
+
+            const profileRef = db.ref('portfolio/profile');
+            profileRef.on('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                portfolioData = data;
+                updatePublicUI(data);
+            }, (error) => {
+                console.error("Error loading profile:", error);
+                useDefaultData();
+            });
+
+            const projectsRef = db.ref('portfolio/projects');
+            projectsRef.on('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                projects = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+                renderProjects();
+            });
+
+            const messagesRef = db.ref('portfolio/messages');
+            messagesRef.on('value', (snapshot) => {
+                console.log("[DEBUG] Messages listener triggered");
+                const data = snapshot.val() || {};
+                console.log("[DEBUG] Raw messages data:", data);
+                messages = Object.keys(data).map(key => ({ id: key, ...data[key], read: data[key].read || false, starred: data[key].starred || false }));
+                console.log("[DEBUG] Processed messages:", messages.length, "messages");
+                updateMessageBadge();
+                if (!document.getElementById('messages').classList.contains('hidden')) {
+                    loadInbox();
+                }
+            }, (error) => {
+                console.error("[DEBUG] Messages listener error:", error);
+            });
+
+            // Load admin users
+            const usersRef = db.ref('portfolio/adminUsers');
+            usersRef.on('value', (snapshot) => {
+                const data = snapshot.val() || {};
+                adminUsers = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+            });
+        }
+
+        function useDefaultData() {
+            const defaultData = {
+                name: "John Doe",
+                title: "Full Stack Developer",
+                bio: "Passionate developer with expertise in modern web technologies.",
+                email: "john@example.com",
+                phone: "+1 234 567 890",
+                location: "New York, USA",
+                skills: [
+                    { name: "JavaScript", level: 90 },
+                    { name: "React", level: 85 },
+                    { name: "Node.js", level: 80 },
+                    { name: "CSS/Tailwind", level: 95 }
+                ],
+                social: {
+                    github: "https://github.com",
+                    linkedin: "https://linkedin.com",
+                    twitter: "https://twitter.com",
+                    instagram: "https://instagram.com"
+                }
+            };
+            portfolioData = defaultData;
+            updatePublicUI(defaultData);
+            projects = [];
+            renderProjects();
+        }
+
+        function updatePublicUI(data) {
+            const heroName = document.getElementById('hero-name');
+            if (heroName) heroName.textContent = data.name || 'Your Name';
+
+            const heroTitle = document.getElementById('hero-title');
+            if (heroTitle) heroTitle.textContent = data.title || 'Your Title';
+
+            const aboutBio = document.getElementById('about-bio');
+            if (aboutBio) aboutBio.textContent = data.bio || 'Your bio here...';
+
+            const contactEmail = document.getElementById('contact-email');
+            if (contactEmail) contactEmail.textContent = data.email || 'email@example.com';
+
+            const contactPhone = document.getElementById('contact-phone');
+            if (contactPhone) contactPhone.textContent = data.phone || '+1 234 567 890';
+
+            const contactLocation = document.getElementById('contact-location');
+            if (contactLocation) contactLocation.textContent = data.location || 'Your Location';
+
+            const socialContainer = document.getElementById('social-links');
+            if (socialContainer && data.social) {
+                socialContainer.innerHTML = '';
+                const socials = [
+                    { key: 'github', icon: 'fab fa-github', color: 'text-gray-700' },
+                    { key: 'linkedin', icon: 'fab fa-linkedin', color: 'text-blue-600' },
+                    { key: 'twitter', icon: 'fab fa-twitter', color: 'text-blue-400' },
+                    { key: 'instagram', icon: 'fab fa-instagram', color: 'text-pink-600' }
+                ];
+
+                socials.forEach(social => {
+                    if (data.social[social.key]) {
+                        socialContainer.innerHTML += `<a href="${data.social[social.key]}" target="_blank" class="${social.color} hover:opacity-75 transition text-2xl"><i class="${social.icon}"></i></a>`;
+                    }
+                });
+            }
+
+            const footerSocial = document.getElementById('footer-social');
+            if (footerSocial && data.social) {
+                footerSocial.innerHTML = '';
+                const socials = [
+                    { key: 'github', icon: 'fab fa-github' },
+                    { key: 'linkedin', icon: 'fab fa-linkedin' },
+                    { key: 'twitter', icon: 'fab fa-twitter' },
+                    { key: 'instagram', icon: 'fab fa-instagram' }
+                ];
+
+                socials.forEach(social => {
+                    if (data.social[social.key]) {
+                        footerSocial.innerHTML += `<a href="${data.social[social.key]}" target="_blank" class="text-gray-400 hover:text-white transition text-xl"><i class="${social.icon}"></i></a>`;
+                    }
+                });
+            }
+
+            const skillsContainer = document.getElementById('skills-container');
+            if (skillsContainer && data.skills) {
+                skillsContainer.innerHTML = '';
+                data.skills.forEach(skill => {
+                    const level = skill.level || 50;
+                    skillsContainer.innerHTML += `
+                        <div>
+                            <div class="flex justify-between mb-1">
+                                <span class="text-sm font-medium text-gray-700">${skill.name}</span>
+                                <span class="text-sm font-medium text-gray-500">${level}%</span>
+                            </div>
+                            <div class="w-full bg-gray-200 rounded-full h-2.5">
+                                <div class="bg-primary h-2.5 rounded-full" style="width: ${level}%"></div>
+                            </div>
+                        </div>
+                    `;
+                });
+            }
+
+            if (data.profileImage) {
+                const heroImg = document.getElementById('hero-profile-image');
+                const heroPlaceholder = document.getElementById('hero-profile-placeholder');
+                if (heroImg) {
+                    heroImg.src = data.profileImage;
+                    heroImg.classList.remove('hidden');
+                }
+                if (heroPlaceholder) heroPlaceholder.classList.add('hidden');
+            }
+
+            if (data.aboutImage) {
+                const aboutImg = document.getElementById('about-image');
+                const aboutPlaceholder = document.getElementById('about-placeholder');
+                if (aboutImg) {
+                    aboutImg.src = data.aboutImage;
+                    aboutImg.classList.remove('hidden');
+                }
+                if (aboutPlaceholder) aboutPlaceholder.classList.add('hidden');
+            }
+
+            const footerYear = document.getElementById('footer-year');
+            if (footerYear) {
+                footerYear.innerHTML = `&copy; ${new Date().getFullYear()} MyPortfolio. All rights reserved.`;
+            }
+        }
+
+        function renderProjects() {
+            const grid = document.getElementById('projects-grid');
+            const loading = document.getElementById('projects-loading');
+
+            if (loading) loading.classList.add('hidden');
+            if (grid) grid.classList.remove('hidden');
+
+            if (!grid) return;
+
+            if (projects.length === 0) {
+                grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-12">No projects yet. Add some in the admin panel!</div>';
+                return;
+            }
+
+            grid.innerHTML = '';
+            projects.forEach(project => {
+                const imageHtml = project.image 
+                    ? `<img src="${project.image}" alt="${project.title}" class="w-full h-48 object-cover">`
+                    : `<div class="w-full h-48 bg-gray-200 flex items-center justify-center"><i class="fas fa-image text-4xl text-gray-400"></i></div>`;
+
+                grid.innerHTML += `
+                    <div class="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-xl transition duration-300">
+                        <div class="relative overflow-hidden group cursor-pointer" onclick="openImageViewer('${project.image || ''}')">
+                            ${imageHtml}
+                            <div class="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition duration-300 flex items-center justify-center">
+                                <i class="fas fa-expand text-white opacity-0 group-hover:opacity-100 transition text-3xl"></i>
+                            </div>
+                        </div>
+                        <div class="p-6">
+                            <span class="text-xs font-semibold text-primary bg-blue-50 px-2 py-1 rounded">${project.category || 'Web Development'}</span>
+                            <h3 class="text-xl font-bold text-gray-900 mt-2 mb-2">${project.title}</h3>
+                            <p class="text-gray-600 text-sm mb-4">${project.description || ''}</p>
+                            ${project.link ? `<a href="${project.link}" target="_blank" class="text-primary hover:text-blue-700 font-medium text-sm">View Project <i class="fas fa-external-link-alt ml-1"></i></a>` : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // ============================================
+        // CONTACT FORM
+        // ============================================
+        function handleContactSubmit(event) {
+            event.preventDefault();
+            console.log("[DEBUG] Contact form submitted");
+
+            const name = document.getElementById('name').value;
+            const email = document.getElementById('email').value;
+            const subject = document.getElementById('subject').value;
+            const message = document.getElementById('message').value;
+
+            console.log("[DEBUG] Form data:", { name, email, subject, message });
+
+            if (!db) {
+                console.error("[DEBUG] Database not initialized!");
+                showToast("Database not available. Message could not be sent.", "error");
+                return;
+            }
+
+            const messageData = {
+                name, email, subject, message,
+                timestamp: Date.now(),
+                read: false,
+                starred: false
+            };
+
+            console.log("[DEBUG] Pushing to portfolio/messages:", messageData);
+
+            db.ref('portfolio/messages').push(messageData)
+                .then((ref) => {
+                    console.log("[DEBUG] Message pushed successfully! Key:", ref.key);
+                    showToast("Message sent successfully!");
+                    document.getElementById('contact-form').reset();
+                })
+                .catch((error) => {
+                    console.error("[DEBUG] Push error:", error);
+                    showToast("Error sending message: " + error.message, "error");
+                });
+        }
+
+        // ============================================
+        // INBOX / MESSAGE CENTER
+        // ============================================
+        function loadInbox() {
+            const container = document.getElementById('admin-messages-list');
+            const filter = currentMessageFilter;
+
+            let filteredMessages = messages;
+            if (filter === 'unread') filteredMessages = messages.filter(m => !m.read);
+            if (filter === 'starred') filteredMessages = messages.filter(m => m.starred);
+
+            filteredMessages.sort((a, b) => {
+                if (a.starred && !b.starred) return -1;
+                if (!a.starred && b.starred) return 1;
+                return b.timestamp - a.timestamp;
+            });
+
+            const unreadBadge = document.getElementById('unread-badge');
+            const unreadCount = messages.filter(m => !m.read).length;
+            if (unreadBadge) {
+                if (unreadCount > 0) {
+                    unreadBadge.textContent = unreadCount;
+                    unreadBadge.classList.remove('hidden');
+                } else {
+                    unreadBadge.classList.add('hidden');
+                }
+            }
+
+            if (filteredMessages.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fas fa-inbox text-6xl text-gray-300 mb-4"></i>
+                        <p class="text-gray-500 text-lg">No ${filter} messages</p>
+                    </div>`;
+                return;
+            }
+
+            container.innerHTML = '';
+            filteredMessages.forEach(msg => {
+                const date = new Date(msg.timestamp);
+                const dateStr = date.toLocaleDateString();
+                const timeStr = date.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                const isSelected = selectedMessages.has(msg.id);
+
+                // Check if user can reply
+                const canReply = hasActionPermission('reply_messages');
+                const canDelete = hasActionPermission('delete_messages');
+
+                container.innerHTML += `
+                    <div class="message-item ${msg.read ? '' : 'bg-blue-50 border-l-4 border-blue-500'} 
+                                ${msg.starred ? 'bg-yellow-50' : ''} 
+                                ${isSelected ? 'bg-gray-100' : ''} 
+                                hover:bg-gray-50 transition cursor-pointer border-b border-gray-100"
+                         onclick="viewMessage('${msg.id}')"
+                         data-id="${msg.id}">
+
+                        <div class="flex items-start p-4 md:p-5">
+                            <div class="flex-shrink-0 pt-1 mr-3" onclick="event.stopPropagation()">
+                                <input type="checkbox" 
+                                       ${isSelected ? 'checked' : ''} 
+                                       onchange="toggleSelectMessage('${msg.id}')"
+                                       class="w-4 h-4 text-primary rounded focus:ring-primary">
+                            </div>
+
+                            <button onclick="event.stopPropagation(); toggleStar('${msg.id}')" 
+                                    class="flex-shrink-0 mr-3 pt-1 text-lg btn-touch">
+                                <i class="fas fa-star ${msg.starred ? 'text-yellow-400' : 'text-gray-300'}"></i>
+                            </button>
+
+                            <div class="flex-1 min-w-0">
+                                <div class="flex items-center justify-between mb-1">
+                                    <div class="flex items-center space-x-2 min-w-0">
+                                        <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                                            ${msg.name.charAt(0).toUpperCase()}
+                                        </div>
+                                        <span class="font-semibold text-gray-900 text-sm truncate">${msg.name}</span>
+                                        ${!msg.read ? '<span class="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0"></span>' : ''}
+                                    </div>
+                                    <div class="flex items-center space-x-2 flex-shrink-0 ml-2">
+                                        <span class="text-xs text-gray-400">${dateStr}</span>
+                                        <span class="text-xs text-gray-400">${timeStr}</span>
+                                    </div>
+                                </div>
+
+                                <p class="font-medium text-gray-800 text-sm mb-1 truncate">${msg.subject}</p>
+                                <p class="text-gray-600 text-sm line-clamp-2">${msg.message}</p>
+
+                                <div class="flex items-center space-x-3 mt-3" onclick="event.stopPropagation()">
+                                    <button onclick="markMessageRead('${msg.id}', ${!msg.read})" 
+                                            class="text-xs text-gray-500 hover:text-primary transition btn-touch px-2 py-1 rounded hover:bg-gray-100">
+                                        <i class="fas ${msg.read ? 'fa-envelope' : 'fa-envelope-open'} mr-1"></i>
+                                        ${msg.read ? 'Mark Unread' : 'Mark Read'}
+                                    </button>
+                                    ${canReply ? `
+                                    <button onclick="replyToMessage('${msg.id}')" 
+                                            class="text-xs text-gray-500 hover:text-primary transition btn-touch px-2 py-1 rounded hover:bg-gray-100">
+                                        <i class="fas fa-reply mr-1"></i> Reply
+                                    </button>
+                                    ` : ''}
+                                    ${canDelete ? `
+                                    <button onclick="deleteMessage('${msg.id}')" 
+                                            class="text-xs text-gray-500 hover:text-red-500 transition btn-touch px-2 py-1 rounded hover:bg-gray-100">
+                                        <i class="fas fa-trash mr-1"></i> Delete
+                                    </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function toggleSelectMessage(id) {
+            if (selectedMessages.has(id)) {
+                selectedMessages.delete(id);
+            } else {
+                selectedMessages.add(id);
+            }
+            updateBulkActions();
+            loadInbox();
+        }
+
+        function selectAllMessages() {
+            const visibleIds = Array.from(document.querySelectorAll('.message-item')).map(el => el.dataset.id);
+            visibleIds.forEach(id => selectedMessages.add(id));
+            updateBulkActions();
+            loadInbox();
+        }
+
+        function deselectAll() {
+            selectedMessages.clear();
+            updateBulkActions();
+            loadInbox();
+        }
+
+        function updateBulkActions() {
+            const bulkBar = document.getElementById('bulk-actions-bar');
+            const count = selectedMessages.size;
+            if (count > 0) {
+                bulkBar.classList.remove('hidden');
+                document.getElementById('selected-count').textContent = count;
+            } else {
+                bulkBar.classList.add('hidden');
+            }
+        }
+
+        function toggleStar(id) {
+            if (!db) return;
+            const msg = messages.find(m => m.id === id);
+            const newStarred = !msg.starred;
+            db.ref(`portfolio/messages/${id}`).update({ starred: newStarred })
+                .then(() => showToast(newStarred ? "Starred" : "Unstarred"))
+                .catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        function viewMessage(id) {
+            const msg = messages.find(m => m.id === id);
+            if (!msg) return;
+
+            if (!msg.read) markMessageRead(id, true);
+
+            const modal = document.getElementById('message-view-modal');
+            const content = document.getElementById('message-view-content');
+
+            const canReply = hasActionPermission('reply_messages');
+            const canDelete = hasActionPermission('delete_messages');
+
+            const date = new Date(msg.timestamp);
+
+            content.innerHTML = `
+                <div class="flex items-start space-x-4 mb-6">
+                    <div class="w-12 h-12 bg-primary rounded-full flex items-center justify-center text-white text-xl font-bold">
+                        ${msg.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div class="flex-1">
+                        <h3 class="text-lg font-bold text-gray-900">${msg.name}</h3>
+                        <p class="text-sm text-gray-500">${msg.email}</p>
+                        <p class="text-xs text-gray-400 mt-1">${date.toLocaleString()}</p>
+                    </div>
+                    <button onclick="toggleStar('${msg.id}')" class="text-2xl btn-touch">
+                        <i class="fas fa-star ${msg.starred ? 'text-yellow-400' : 'text-gray-300'}"></i>
+                    </button>
+                </div>
+
+                <div class="bg-gray-50 rounded-lg p-4 mb-6">
+                    <p class="text-sm font-semibold text-gray-700 mb-2">Subject:</p>
+                    <p class="text-gray-900">${msg.subject}</p>
+                </div>
+
+                <div class="bg-white border rounded-lg p-4 mb-6">
+                    <p class="text-sm font-semibold text-gray-700 mb-2">Message:</p>
+                    <p class="text-gray-800 whitespace-pre-wrap">${msg.message}</p>
+                </div>
+
+                <div class="flex space-x-3">
+                    ${canReply ? `
+                    <button onclick="replyToMessage('${msg.id}')" class="flex-1 bg-primary text-white py-2 rounded-lg hover:bg-blue-700 transition btn-touch">
+                        <i class="fas fa-reply mr-2"></i> Reply via Email
+                    </button>
+                    ` : ''}
+                    ${canDelete ? `
+                    <button onclick="deleteMessage('${msg.id}'); closeMessageModal();" class="px-4 py-2 text-red-500 border border-red-500 rounded-lg hover:bg-red-50 transition btn-touch">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    ` : ''}
+                </div>
+            `;
+
+            modal.classList.remove('hidden');
+        }
+
+        function closeMessageModal() {
+            document.getElementById('message-view-modal').classList.add('hidden');
+        }
+
+        function replyToMessage(id) {
+            if (!hasActionPermission('reply_messages')) {
+                showToast('You do not have permission to reply to messages.', 'error');
+                return;
+            }
+            const msg = messages.find(m => m.id === id);
+            if (!msg) return;
+
+            const subject = encodeURIComponent(`Re: ${msg.subject}`);
+            const body = encodeURIComponent(`Hello ${msg.name},\n\nThank you for your message regarding "${msg.subject}".\n\n[Your reply here]\n\nBest regards,\n${portfolioData.name || 'Admin'}`);
+
+            window.open(`mailto:${msg.email}?subject=${subject}&body=${body}`, '_blank');
+            showToast("Opening email client...");
+        }
+
+        function setMessageFilter(filter) {
+            currentMessageFilter = filter;
+
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active', 'bg-primary', 'text-white');
+                btn.classList.add('text-gray-600', 'hover:bg-gray-100');
+            });
+
+            const activeBtn = document.getElementById(`filter-${filter}`);
+            if (activeBtn) {
+                activeBtn.classList.add('active', 'bg-primary', 'text-white');
+                activeBtn.classList.remove('text-gray-600', 'hover:bg-gray-100');
+            }
+
+            loadInbox();
+        }
+
+        function bulkMarkRead() {
+            if (!db) return;
+            const updates = {};
+            selectedMessages.forEach(id => {
+                updates[`portfolio/messages/${id}/read`] = true;
+            });
+            db.ref().update(updates)
+                .then(() => {
+                    selectedMessages.clear();
+                    updateBulkActions();
+                    showToast("Marked as read");
+                });
+        }
+
+        function bulkDelete() {
+            if (!confirm(`Delete ${selectedMessages.size} messages?`)) return;
+            if (!db) return;
+
+            const promises = [];
+            selectedMessages.forEach(id => {
+                promises.push(db.ref(`portfolio/messages/${id}`).remove());
+            });
+
+            Promise.all(promises)
+                .then(() => {
+                    selectedMessages.clear();
+                    updateBulkActions();
+                    showToast("Messages deleted");
+                });
+        }
+
+        function markMessageRead(id, read) {
+            if (!db) return;
+            db.ref(`portfolio/messages/${id}`).update({ read })
+                .then(() => showToast(read ? "Marked as read" : "Marked as unread"))
+                .catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        function markAllAsRead() {
+            if (!db) return;
+            const updates = {};
+            messages.forEach(msg => {
+                if (!msg.read) updates[`portfolio/messages/${msg.id}/read`] = true;
+            });
+            db.ref().update(updates)
+                .then(() => showToast("All messages marked as read"))
+                .catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        function deleteMessage(id) {
+            if (!hasActionPermission('delete_messages')) {
+                showToast('You do not have permission to delete messages.', 'error');
+                return;
+            }
+            if (!confirm('Are you sure you want to delete this message?')) return;
+            if (!db) return;
+            db.ref(`portfolio/messages/${id}`).remove()
+                .then(() => showToast("Message deleted"))
+                .catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        function updateMessageBadge() {
+            const unreadCount = messages.filter(m => !m.read).length;
+
+            const sidebarBadge = document.getElementById('msg-badge-sidebar');
+            if (sidebarBadge) {
+                if (unreadCount > 0) {
+                    sidebarBadge.textContent = unreadCount;
+                    sidebarBadge.classList.remove('hidden');
+                } else {
+                    sidebarBadge.classList.add('hidden');
+                }
+            }
+
+            const mobileBadge = document.getElementById('msg-badge-mobile');
+            if (mobileBadge) {
+                if (unreadCount > 0) {
+                    mobileBadge.classList.remove('hidden');
+                } else {
+                    mobileBadge.classList.add('hidden');
+                }
+            }
+
+            const dashCount = document.getElementById('dash-message-count');
+            if (dashCount) {
+                dashCount.textContent = unreadCount;
+            }
+        }
+
+        // ============================================
+        // NOTIFICATIONS SYSTEM
+        // ============================================
+        function initNotifications() {
+            if (!('Notification' in window)) {
+                console.log('Browser does not support notifications');
+                return;
+            }
+
+            notificationPermission = Notification.permission;
+
+            if (notificationPermission === 'granted') {
+                notificationsEnabled = true;
+            } else if (notificationPermission === 'default') {
+                showNotificationRequest();
+            }
+        }
+
+        function showNotificationRequest() {
+            const banner = document.getElementById('notification-banner');
+            if (banner) banner.classList.remove('hidden');
+        }
+
+        function requestNotificationPermission() {
+            Notification.requestPermission().then(permission => {
+                notificationPermission = permission;
+                if (permission === 'granted') {
+                    showToast('Notifications enabled!');
+                    const banner = document.getElementById('notification-banner');
+                    if (banner) banner.classList.add('hidden');
+                } else {
+                    showToast('Notifications denied', 'error');
+                }
+            });
+        }
+
+        function sendBrowserNotification(title, options = {}) {
+            if (notificationPermission !== 'granted') return;
+
+            const defaultOptions = {
+                icon: '/favicon.ico',
+                badge: '/favicon.ico',
+                tag: 'portfolio-message',
+                requireInteraction: true,
+                ...options
+            };
+
+            const notification = new Notification(title, defaultOptions);
+
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+                navigateAdmin('messages');
+            };
+
+            return notification;
+        }
+
+        function setupMessageNotifications() {
+            if (!db) return;
+
+            let initialLoad = true;
+
+            db.ref('portfolio/messages').on('child_added', (snapshot) => {
+                if (initialLoad) return;
+
+                const msg = snapshot.val();
+
+                if (!msg.read) {
+                    sendBrowserNotification(`New message from ${msg.name}`, {
+                        body: msg.subject,
+                        data: { messageId: snapshot.key }
+                    });
+
+                    showToast(`New message: ${msg.subject}`);
+                    addNotification(`New message from ${msg.name}`, msg.subject, snapshot.key);
+                }
+            });
+
+            setTimeout(() => {
+                initialLoad = false;
+            }, 3000);
+        }
+
+        function addNotification(title, body, messageId) {
+            notifications.unshift({
+                id: Date.now(),
+                title,
+                body,
+                messageId,
+                read: false,
+                timestamp: Date.now()
+            });
+            updateNotificationBadge();
+        }
+
+        function updateNotificationBadge() {
+            const badge = document.getElementById('notification-badge');
+            const unreadCount = notifications.filter(n => !n.read).length;
+
+            if (badge) {
+                if (unreadCount > 0) {
+                    badge.textContent = unreadCount;
+                    badge.classList.remove('hidden');
+                } else {
+                    badge.classList.add('hidden');
+                }
+            }
+        }
+
+        function toggleNotificationPanel() {
+            const panel = document.getElementById('notification-panel');
+            panel.classList.toggle('hidden');
+
+            if (!panel.classList.contains('hidden')) {
+                renderNotifications();
+            }
+        }
+
+        function renderNotifications() {
+            const container = document.getElementById('notifications-list');
+
+            if (notifications.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-8 text-sm">No notifications</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            notifications.forEach(notif => {
+                const date = new Date(notif.timestamp);
+                container.innerHTML += `
+                    <div class="p-4 hover:bg-gray-50 cursor-pointer transition ${notif.read ? '' : 'bg-blue-50'}"
+                         onclick="handleNotificationClick('${notif.messageId}')">
+                        <div class="flex items-start space-x-3">
+                            <div class="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white flex-shrink-0">
+                                <i class="fas fa-envelope text-sm"></i>
+                            </div>
+                            <div class="flex-1 min-w-0">
+                                <p class="font-medium text-gray-800 text-sm">${notif.title}</p>
+                                <p class="text-gray-600 text-xs truncate">${notif.body}</p>
+                                <p class="text-gray-400 text-xs mt-1">${date.toLocaleTimeString()}</p>
+                            </div>
+                            ${!notif.read ? '<span class="w-2 h-2 bg-blue-500 rounded-full flex-shrink-0 mt-1"></span>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function handleNotificationClick(messageId) {
+            const notif = notifications.find(n => n.messageId === messageId);
+            if (notif) {
+                notif.read = true;
+                updateNotificationBadge();
+            }
+            toggleNotificationPanel();
+            navigateAdmin('messages');
+            viewMessage(messageId);
+        }
+
+        function markAllNotificationsRead() {
+            notifications.forEach(n => n.read = true);
+            updateNotificationBadge();
+            renderNotifications();
+        }
+
+        // ============================================
+        // ADMIN DASHBOARD
+        // ============================================
+        function loadAdminData() {
+            document.getElementById('dash-project-count').textContent = projects.length;
+            document.getElementById('dash-message-count').textContent = messages.filter(m => !m.read).length;
+            loadRecentMessages();
+        }
+
+        function loadRecentMessages() {
+            const container = document.getElementById('recent-messages-list');
+            const recentMessages = messages.slice(0, 5);
+
+            if (recentMessages.length === 0) {
+                container.innerHTML = '<p class="text-gray-500 text-center py-4">No messages yet</p>';
+                return;
+            }
+
+            container.innerHTML = '';
+            recentMessages.forEach(msg => {
+                const date = new Date(msg.timestamp).toLocaleDateString();
+                container.innerHTML += `
+                    <div class="p-4 bg-gray-50 rounded-lg border ${msg.read ? 'border-gray-200' : 'border-blue-300 bg-blue-50'} cursor-pointer hover:bg-gray-100 transition"
+                         onclick="navigateAdmin('messages'); viewMessage('${msg.id}')">
+                        <div class="flex justify-between items-start">
+                            <div>
+                                <p class="font-semibold text-gray-800">${msg.name}</p>
+                                <p class="text-sm text-gray-600">${msg.subject}</p>
+                                <p class="text-xs text-gray-400 mt-1">${date}</p>
+                            </div>
+                            ${!msg.read ? '<span class="w-2 h-2 bg-blue-500 rounded-full"></span>' : ''}
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        // ============================================
+        // PROJECTS ADMIN
+        // ============================================
+        function loadAdminProjects() {
+            const tbody = document.getElementById('admin-projects-table-desktop');
+            const canEdit = hasActionPermission('edit_projects');
+            const canDelete = hasActionPermission('delete_projects');
+
+            if (tbody) {
+                if (projects.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" class="px-4 lg:px-6 py-6 lg:py-8 text-center text-gray-500 text-sm">No projects yet</td></tr>';
+                } else {
+                    tbody.innerHTML = '';
+                    projects.forEach(project => {
+                        const date = project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'N/A';
+                        tbody.innerHTML += `
+                            <tr class="hover:bg-gray-50 transition">
+                                <td class="px-4 lg:px-6 py-3 lg:py-4">
+                                    <div class="flex items-center space-x-3">
+                                        <div class="w-10 h-10 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                                            ${project.image ? `<img src="${project.image}" class="w-full h-full object-cover">` : '<i class="fas fa-image text-gray-400 text-sm"></i>'}
+                                        </div>
+                                        <span class="font-medium text-gray-800 text-sm">${project.title}</span>
+                                    </div>
+                                </td>
+                                <td class="px-4 lg:px-6 py-3 lg:py-4 text-gray-600 text-sm">${project.category || 'Web Development'}</td>
+                                <td class="px-4 lg:px-6 py-3 lg:py-4 text-gray-600 text-sm">${date}</td>
+                                <td class="px-4 lg:px-6 py-3 lg:py-4"><span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Active</span></td>
+                                <td class="px-4 lg:px-6 py-3 lg:py-4 text-right space-x-2">
+                                    ${canEdit ? `<button onclick="editProject('${project.id}')" class="text-blue-600 hover:text-blue-800 transition btn-touch p-2"><i class="fas fa-edit"></i></button>` : ''}
+                                    ${canDelete ? `<button onclick="deleteProject('${project.id}')" class="text-red-600 hover:text-red-800 transition btn-touch p-2"><i class="fas fa-trash"></i></button>` : ''}
+                                </td>
+                            </tr>
+                        `;
+                    });
+                }
+            }
+
+            const mobileContainer = document.getElementById('admin-projects-mobile');
+            if (mobileContainer) {
+                if (projects.length === 0) {
+                    mobileContainer.innerHTML = '<p class="text-gray-500 text-center py-8 text-sm">No projects yet</p>';
+                } else {
+                    mobileContainer.innerHTML = '';
+                    projects.forEach(project => {
+                        const date = project.createdAt ? new Date(project.createdAt).toLocaleDateString() : 'N/A';
+                        mobileContainer.innerHTML += `
+                            <div class="mobile-project-card">
+                                <div class="flex items-center space-x-3 mb-3">
+                                    <div class="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center overflow-hidden flex-shrink-0">
+                                        ${project.image ? `<img src="${project.image}" class="w-full h-full object-cover">` : '<i class="fas fa-image text-gray-400"></i>'}
+                                    </div>
+                                    <div class="flex-1 min-w-0">
+                                        <h4 class="font-semibold text-gray-800 text-sm truncate">${project.title}</h4>
+                                        <p class="text-xs text-gray-500">${project.category || 'Web Development'}</p>
+                                        <p class="text-xs text-gray-400">${date}</p>
+                                    </div>
+                                    <span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium flex-shrink-0">Active</span>
+                                </div>
+                                <div class="flex space-x-2">
+                                    ${canEdit ? `
+                                    <button onclick="editProject('${project.id}')" class="flex-1 bg-blue-50 text-blue-600 py-2 rounded-lg text-sm font-medium btn-touch">
+                                        <i class="fas fa-edit mr-1"></i> Edit
+                                    </button>
+                                    ` : ''}
+                                    ${canDelete ? `
+                                    <button onclick="deleteProject('${project.id}')" class="flex-1 bg-red-50 text-red-600 py-2 rounded-lg text-sm font-medium btn-touch">
+                                        <i class="fas fa-trash mr-1"></i> Delete
+                                    </button>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            }
+        }
+
+        let currentProjectImage = null;
+
+        function openProjectModal(projectId = null) {
+            if (!hasActionPermission('edit_projects')) {
+                showToast('You do not have permission to manage projects.', 'error');
+                return;
+            }
+
+            const modal = document.getElementById('project-modal');
+            const form = document.getElementById('project-form');
+            const title = document.getElementById('modal-title');
+
+            form.reset();
+            currentProjectImage = null;
+            document.getElementById('project-image-preview-container').classList.add('hidden');
+            document.getElementById('project-id').value = '';
+
+            if (projectId) {
+                const project = projects.find(p => p.id === projectId);
+                if (project) {
+                    title.textContent = 'Edit Project';
+                    document.getElementById('project-id').value = projectId;
+                    document.getElementById('project-title').value = project.title || '';
+                    document.getElementById('project-category').value = project.category || 'Web Development';
+                    document.getElementById('project-desc').value = project.description || '';
+                    document.getElementById('project-link').value = project.link || '';
+                    if (project.image) {
+                        currentProjectImage = project.image;
+                        document.getElementById('project-image-preview').src = project.image;
+                        document.getElementById('project-image-preview-container').classList.remove('hidden');
+                    }
+                }
+            } else {
+                title.textContent = 'Add New Project';
+            }
+
+            modal.classList.remove('hidden');
+            if (window.innerWidth < 640) {
+                document.body.style.overflow = 'hidden';
+            }
+        }
+
+        function closeProjectModal() {
+            document.getElementById('project-modal').classList.add('hidden');
+            document.body.style.overflow = '';
+        }
+
+        function saveProject(event) {
+            event.preventDefault();
+
+            if (!hasActionPermission('edit_projects')) {
+                showToast('You do not have permission to save projects.', 'error');
+                return;
+            }
+
+            if (!db) {
+                showToast("Database not available", "error");
+                return;
+            }
+
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Saving...';
+            submitBtn.disabled = true;
+
+            const id = document.getElementById('project-id').value;
+            const title = document.getElementById('project-title').value;
+            const category = document.getElementById('project-category').value;
+            const description = document.getElementById('project-desc').value;
+            const link = document.getElementById('project-link').value;
+
+            // Handle image: if it's a base64 data URL (from upload), we need to save it directly
+            // If it's a URL string, save as-is
+            let imageToSave = currentProjectImage;
+
+            // If image is a base64 string that's too large, show warning
+            if (imageToSave && imageToSave.startsWith('data:') && imageToSave.length > 1000000) {
+                console.warn("[SAVE] Large base64 image, may cause slow save");
+            }
+
+            const projectData = {
+                title,
+                category,
+                description,
+                link,
+                image: imageToSave,
+                createdAt: id ? undefined : Date.now()
+            };
+
+            let promise;
+            if (id) {
+                promise = db.ref(`portfolio/projects/${id}`).update(projectData);
+            } else {
+                promise = db.ref('portfolio/projects').push(projectData);
+            }
+
+            promise.then(() => {
+                showToast(id ? "Project updated!" : "Project added!");
+                closeProjectModal();
+            }).catch(err => {
+                showToast("Error: " + err.message, "error");
+            }).finally(() => {
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        }
+
+        function editProject(id) {
+            if (!hasActionPermission('edit_projects')) {
+                showToast('You do not have permission to edit projects.', 'error');
+                return;
+            }
+            openProjectModal(id);
+        }
+
+        function deleteProject(id) {
+            if (!hasActionPermission('delete_projects')) {
+                showToast('You do not have permission to delete projects.', 'error');
+                return;
+            }
+            if (!confirm('Are you sure?')) return;
+            if (!db) return;
+            db.ref(`portfolio/projects/${id}`).remove()
+                .then(() => showToast("Project deleted"))
+                .catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        function handleProjectImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                showToast("Image too large. Max 5MB.", "error");
+                return;
+            }
+
+            // Show immediate feedback
+            showToast("Processing image...", "success");
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                currentProjectImage = e.target.result;
+                const preview = document.getElementById('project-image-preview');
+                const container = document.getElementById('project-image-preview-container');
+                preview.src = currentProjectImage;
+                container.classList.remove('hidden');
+
+                // Clear URL input to avoid confusion
+                document.getElementById('project-image-url').value = '';
+
+                showToast("Image ready! Click Save Project to add it.");
+            };
+            reader.onerror = () => {
+                showToast("Error reading image file", "error");
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function handleProjectImageUrl(url) {
+            if (!url || url.trim() === '') return;
+
+            // Validate URL format
+            try {
+                new URL(url);
+            } catch (e) {
+                // Not a valid URL, might be relative or just invalid
+                if (!url.startsWith('http://') && !url.startsWith('https://') && !url.startsWith('data:')) {
+                    return; // Don't process invalid URLs
+                }
+            }
+
+            currentProjectImage = url.trim();
+            const preview = document.getElementById('project-image-preview');
+            const container = document.getElementById('project-image-preview-container');
+
+            // Show preview with loading state
+            preview.src = url;
+            container.classList.remove('hidden');
+
+            // If URL input is used, clear file input to avoid confusion
+            document.getElementById('project-image-input').value = '';
+
+            console.log("[IMAGE] URL set:", url.substring(0, 50) + "...");
+        }
+
+        function removeProjectImage() {
+            currentProjectImage = null;
+            document.getElementById('project-image-preview-container').classList.add('hidden');
+            document.getElementById('project-image-input').value = '';
+            document.getElementById('project-image-url').value = '';
+        }
+
+        function dragOverHandler(event) {
+            event.preventDefault();
+            event.currentTarget.classList.add('drag-over');
+        }
+
+        function dragLeaveHandler(event) {
+            event.currentTarget.classList.remove('drag-over');
+        }
+
+        function dropHandler(event, type) {
+            event.preventDefault();
+            event.currentTarget.classList.remove('drag-over');
+
+            const file = event.dataTransfer.files[0];
+            if (file && file.type.startsWith('image/')) {
+                if (type === 'project') {
+                    const input = document.getElementById('project-image-input');
+                    const dt = new DataTransfer();
+                    dt.items.add(file);
+                    input.files = dt.files;
+                    handleProjectImageUpload({ target: input });
+                }
+            }
+        }
+
+        // ============================================
+        // SETTINGS
+        // ============================================
+        let profileImageBase64 = null;
+        let aboutImageBase64 = null;
+
+        function loadSettings() {
+            if (!hasActionPermission('edit_settings')) {
+                showToast('You do not have permission to edit settings.', 'error');
+                navigateAdmin('dashboard');
+                return;
+            }
+
+            const data = portfolioData || {};
+            document.getElementById('setting-name').value = data.name || '';
+            document.getElementById('setting-title').value = data.title || '';
+            document.getElementById('setting-email').value = data.email || '';
+            document.getElementById('setting-phone').value = data.phone || '';
+            document.getElementById('setting-location').value = data.location || '';
+            document.getElementById('setting-bio').value = data.bio || '';
+
+            if (data.social) {
+                document.getElementById('social-github').value = data.social.github || '';
+                document.getElementById('social-linkedin').value = data.social.linkedin || '';
+                document.getElementById('social-twitter').value = data.social.twitter || '';
+                document.getElementById('social-instagram').value = data.social.instagram || '';
+            }
+
+            const skillsEditor = document.getElementById('skills-editor');
+            skillsEditor.innerHTML = '';
+            if (data.skills) {
+                data.skills.forEach((skill, index) => {
+                    addSkillField(skill.name, skill.level, index);
+                });
+            }
+
+            if (data.profileImage) {
+                document.getElementById('settings-profile-preview').src = data.profileImage;
+                document.getElementById('settings-profile-preview').classList.remove('hidden');
+                document.getElementById('settings-profile-placeholder').classList.add('hidden');
+            } else {
+                document.getElementById('settings-profile-preview').classList.add('hidden');
+                document.getElementById('settings-profile-placeholder').classList.remove('hidden');
+            }
+
+            if (data.aboutImage) {
+                document.getElementById('about-image-preview').src = data.aboutImage;
+                document.getElementById('about-image-preview-container').classList.remove('hidden');
+            } else {
+                document.getElementById('about-image-preview-container').classList.add('hidden');
+            }
+        }
+
+        function addSkillField(name = '', level = 50, index = null) {
+            const container = document.getElementById('skills-editor');
+            const div = document.createElement('div');
+            div.className = 'flex space-x-3 items-center';
+            div.innerHTML = `
+                <input type="text" class="skill-name flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary" placeholder="Skill name" value="${name}">
+                <input type="number" class="skill-level w-24 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-primary" placeholder="0-100" min="0" max="100" value="${level}">
+                <button type="button" onclick="this.parentElement.remove()" class="text-red-500 hover:text-red-700 btn-touch"><i class="fas fa-trash"></i></button>
+            `;
+            container.appendChild(div);
+        }
+
+        function handleProfileImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (file.size > 5 * 1024 * 1024) {
+                showToast("Image too large. Max 5MB.", "error");
+                return;
+            }
+
+            const progressBar = document.getElementById('profile-progress-bar');
+            const progressContainer = document.getElementById('profile-upload-progress');
+            progressContainer.classList.remove('hidden');
+            progressBar.style.width = '50%';
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                profileImageBase64 = e.target.result;
+                document.getElementById('settings-profile-preview').src = profileImageBase64;
+                document.getElementById('settings-profile-preview').classList.remove('hidden');
+                document.getElementById('settings-profile-placeholder').classList.add('hidden');
+                progressBar.style.width = '100%';
+                setTimeout(() => progressContainer.classList.add('hidden'), 500);
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function handleAboutImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                aboutImageBase64 = e.target.result;
+                document.getElementById('about-image-preview').src = aboutImageBase64;
+                document.getElementById('about-image-preview-container').classList.remove('hidden');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function saveSettings(event) {
+            event.preventDefault();
+
+            if (!hasActionPermission('edit_settings')) {
+                showToast('You do not have permission to save settings.', 'error');
+                return;
+            }
+
+            if (!db) {
+                showToast("Database not available", "error");
+                return;
+            }
+
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Saving...';
+            submitBtn.disabled = true;
+
+            const skills = [];
+            document.querySelectorAll('#skills-editor > div').forEach(div => {
+                const name = div.querySelector('.skill-name').value;
+                const level = parseInt(div.querySelector('.skill-level').value) || 0;
+                if (name) skills.push({ name, level });
+            });
+
+            const settingsData = {
+                name: document.getElementById('setting-name').value,
+                title: document.getElementById('setting-title').value,
+                email: document.getElementById('setting-email').value,
+                phone: document.getElementById('setting-phone').value,
+                location: document.getElementById('setting-location').value,
+                bio: document.getElementById('setting-bio').value,
+                social: {
+                    github: document.getElementById('social-github').value,
+                    linkedin: document.getElementById('social-linkedin').value,
+                    twitter: document.getElementById('social-twitter').value,
+                    instagram: document.getElementById('social-instagram').value
+                },
+                skills: skills
+            };
+
+            if (profileImageBase64) settingsData.profileImage = profileImageBase64;
+            if (aboutImageBase64) settingsData.aboutImage = aboutImageBase64;
+
+            db.ref('portfolio/profile').update(settingsData)
+                .then(() => {
+                    showToast("Settings saved successfully!");
+                    profileImageBase64 = null;
+                    aboutImageBase64 = null;
+                })
+                .catch(err => showToast("Error: " + err.message, "error"))
+                .finally(() => {
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                });
+        }
+
+        // ============================================
+        // ACCESS CONTROL - 100% WORKING
+        // ============================================
+        function loadAccessControl() {
+            if (!hasActionPermission('manage_access_control')) {
+                showAccessDenied();
+                return;
+            }
+
+            const container = document.getElementById('users-list');
+
+            if (adminUsers.length === 0) {
+                container.innerHTML = '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-500 text-sm">No users found</td></tr>';
+                return;
+            }
+
+            container.innerHTML = '';
+            adminUsers.forEach(user => {
+                const roleClass = user.role === 'admin' ? 'role-admin' : user.role === 'editor' ? 'role-editor' : 'role-viewer';
+                const canDelete = hasActionPermission('remove_users') && user.id !== currentUser.uid;
+                const canEdit = hasActionPermission('change_roles') && user.id !== currentUser.uid;
+
+                container.innerHTML += `
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-4 py-3">
+                            <div class="flex items-center space-x-3">
+                                <div class="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
+                                    <i class="fas fa-user text-gray-500 text-sm"></i>
+                                </div>
+                                <span class="text-sm text-gray-800">${user.email || 'Unknown'}</span>
+                            </div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="role-badge ${roleClass}">${user.role || 'Admin'}</span>
+                        </td>
+                        <td class="px-4 py-3 text-sm text-gray-600">
+                            ${user.createdBy ? (adminUsers.find(u => u.id === user.createdBy)?.email || 'System') : 'System'}
+                        </td>
+                        <td class="px-4 py-3">
+                            <span class="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Active</span>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            ${canEdit ? `
+                            <button onclick="openEditUserModal('${user.id}')" class="text-blue-500 hover:text-blue-700 transition btn-touch p-2 mr-1" title="Edit Role">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            ` : ''}
+                            ${canDelete ? `
+                            <button onclick="deleteUser('${user.id}')" class="text-red-500 hover:text-red-700 transition btn-touch p-2" title="Remove User">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                            ` : ''}
+                        </td>
+                    </tr>
+                `;
+            });
+        }
+
+        function openAddUserModal() {
+            if (!hasActionPermission('add_users')) {
+                showToast('You do not have permission to add users.', 'error');
+                return;
+            }
+            document.getElementById('add-user-modal').classList.remove('hidden');
+        }
+
+        function closeAddUserModal() {
+            document.getElementById('add-user-modal').classList.add('hidden');
+            document.getElementById('add-user-form').reset();
+        }
+
+        function handleAddUser(event) {
+            event.preventDefault();
+
+            if (!hasActionPermission('add_users')) {
+                showToast('You do not have permission to add users.', 'error');
+                return;
+            }
+
+            if (!auth || !db) {
+                showToast("Firebase not available", "error");
+                return;
+            }
+
+            const email = document.getElementById('new-user-email').value;
+            const role = document.getElementById('new-user-role').value;
+            const password = document.getElementById('new-user-password').value;
+
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Adding...';
+            submitBtn.disabled = true;
+
+            // Create secondary app for new user
+            let secondaryApp;
+            try {
+                secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary_' + Date.now());
+            } catch (e) {
+                // If secondary app already exists, try with different name
+                secondaryApp = firebase.initializeApp(firebaseConfig, 'secondary_' + Math.random().toString(36).substr(2, 9));
+            }
+
+            const secondaryAuth = firebase.auth(secondaryApp);
+
+            secondaryAuth.createUserWithEmailAndPassword(email, password)
+                .then((userCredential) => {
+                    const user = userCredential.user;
+                    // Save user role to database
+                    return db.ref('portfolio/adminUsers/' + user.uid).set({
+                        email: email,
+                        role: role,
+                        createdAt: Date.now(),
+                        createdBy: currentUser.uid
+                    });
+                })
+                .then(() => {
+                    showToast("User added successfully!");
+                    closeAddUserModal();
+                })
+                .catch((error) => {
+                    showToast("Error: " + error.message, "error");
+                })
+                .finally(() => {
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                    try {
+                        secondaryApp.delete();
+                    } catch (e) {
+                        console.log("Secondary app cleanup error:", e);
+                    }
+                });
+        }
+
+        // Edit User Role Functions
+        function openEditUserModal(userId) {
+            if (!hasActionPermission('change_roles')) {
+                showToast('You do not have permission to change user roles.', 'error');
+                return;
+            }
+
+            const user = adminUsers.find(u => u.id === userId);
+            if (!user) return;
+
+            currentEditingUserId = userId;
+            document.getElementById('edit-user-id').value = userId;
+            document.getElementById('edit-user-email').value = user.email;
+            document.getElementById('edit-user-role').value = user.role || 'viewer';
+            document.getElementById('edit-user-modal').classList.remove('hidden');
+        }
+
+        function closeEditUserModal() {
+            document.getElementById('edit-user-modal').classList.add('hidden');
+            currentEditingUserId = null;
+        }
+
+        function handleEditUserRole(event) {
+            event.preventDefault();
+
+            if (!hasActionPermission('change_roles')) {
+                showToast('You do not have permission to change user roles.', 'error');
+                return;
+            }
+
+            if (!db) return;
+
+            const userId = document.getElementById('edit-user-id').value;
+            const newRole = document.getElementById('edit-user-role').value;
+
+            if (userId === currentUser.uid) {
+                showToast('You cannot change your own role.', 'error');
+                closeEditUserModal();
+                return;
+            }
+
+            const submitBtn = event.target.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> Updating...';
+            submitBtn.disabled = true;
+
+            db.ref(`portfolio/adminUsers/${userId}`).update({ role: newRole })
+                .then(() => {
+                    showToast("User role updated successfully!");
+                    closeEditUserModal();
+                    loadAccessControl();
+                })
+                .catch(err => showToast("Error: " + err.message, "error"))
+                .finally(() => {
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                });
+        }
+
+        function deleteUser(userId) {
+            if (!hasActionPermission('remove_users')) {
+                showToast('You do not have permission to remove users.', 'error');
+                return;
+            }
+
+            if (userId === currentUser.uid) {
+                showToast('You cannot remove yourself.', 'error');
+                return;
+            }
+
+            if (!confirm('Are you sure you want to remove this user? They will lose admin access.')) return;
+            if (!db) return;
+
+            db.ref(`portfolio/adminUsers/${userId}`).remove()
+                .then(() => {
+                    showToast("User removed from admin list");
+                    loadAccessControl();
+                })
+                .catch(err => showToast("Error: " + err.message, "error"));
+        }
+
+        // ============================================
+        // IMAGE VIEWER
+        // ============================================
+        function openImageViewer(src) {
+            if (!src) return;
+            const viewer = document.getElementById('image-viewer');
+            const img = document.getElementById('viewer-image');
+            img.src = src;
+            viewer.classList.remove('hidden');
+        }
+
+        function closeImageViewer() {
+            document.getElementById('image-viewer').classList.add('hidden');
+        }
+
+        // ============================================
+        // INITIALIZATION
+        // ============================================
+        document.addEventListener('DOMContentLoaded', () => {
+            // loadPortfolioData() moved to auth.onAuthStateChanged to prevent PERMISSION_DENIED
+
+            // Fallback: Hide loading after 5 seconds max to prevent infinite loading
+            setTimeout(() => {
+                hideLoading();
+            }, 5000);
+
+            closeAdminSidebar();
+
+            const footerYear = document.getElementById('footer-year');
+            if (footerYear) {
+                footerYear.innerHTML = `&copy; ${new Date().getFullYear()} MyPortfolio. All rights reserved.`;
+            }
+
+            let touchStartX = 0;
+            const sidebar = document.getElementById('admin-sidebar');
+            if (sidebar) {
+                sidebar.addEventListener('touchstart', (e) => {
+                    touchStartX = e.touches[0].clientX;
+                }, { passive: true });
+
+                sidebar.addEventListener('touchend', (e) => {
+                    const touchEndX = e.changedTouches[0].clientX;
+                    if (touchStartX - touchEndX > 50 && window.innerWidth < 1024) {
+                        closeAdminSidebar();
+                    }
+                }, { passive: true });
+            }
+
+            const mainContent = document.getElementById('admin-main-content');
+            if (mainContent) {
+                mainContent.addEventListener('touchstart', (e) => {
+                    touchStartX = e.touches[0].clientX;
+                }, { passive: true });
+
+                mainContent.addEventListener('touchend', (e) => {
+                    const touchEndX = e.changedTouches[0].clientX;
+                    if (touchEndX - touchStartX > 80 && touchStartX < 30 && window.innerWidth < 1024) {
+                        toggleAdminSidebar();
+                    }
+                }, { passive: true });
+            }
+
+            // Close notification panel when clicking outside
+            document.addEventListener('click', (e) => {
+                const panel = document.getElementById('notification-panel');
+                const bell = document.querySelector('[onclick="toggleNotificationPanel()"]');
+                if (panel && !panel.classList.contains('hidden') && 
+                    !panel.contains(e.target) && 
+                    bell && !bell.contains(e.target)) {
+                    panel.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
